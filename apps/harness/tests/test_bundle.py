@@ -6,12 +6,17 @@ SYNTHETIC in-memory Ed25519 key. Build inputs come from HP_BUNDLE_INPUTS_DIR and
 signature cross-checks from HP_BUNDLE_OPENSSL; both must be named explicitly. The Host is the SYNTHETIC
 reproduction in bundle_host.py; product lines, remotes, platform and Agent are synthetic. No real Host, model,
 remote, platform or publisher key is used.
+
+Admission compares the manifest's minimumOs with this machine's macOS, as the receiver does. Cases that install or
+start the bundle therefore skip, with both versions in the reason, on a machine below minimumOs; build, descriptor
+and refusal cases run on any machine.
 """
 import contextlib
 import io
 import json
 import os
 from pathlib import Path
+import platform
 import re
 import shutil
 import signal
@@ -95,6 +100,14 @@ class Case(unittest.TestCase):
         h = BH.BundleHost(installation, output=self.directory / ("frames-%d.jsonl" % len(self.hosts)), **kw)
         self.hosts.append(h)
         return h
+
+    def require_minimum_os(self):
+        """Skip a case that installs or starts the bundle on this machine when its macOS is below the manifest's
+        minimumOs: admission refuses the bundle there (UNSUPPORTED_VERSION) before anything under test runs.
+        Build, descriptor and refusal cases do not install the bundle and run on any host."""
+        reason = BH.below_minimum_os(self.b.manifest["minimumOs"])
+        if reason:
+            self.skipTest(reason)
 
     def installation(self, name="rt"):
         verdict = BH.admit(self.b.import_dir)
@@ -346,6 +359,7 @@ class BuildCase(Case):
 class AdmissionCase(Case):
     def test_ac04_the_bundle_is_admitted_and_installed(self):
         """AC-04: the synthetic Host admits the bundle in the receiver's order, installs it and re-verifies it before launch."""
+        self.require_minimum_os()
         verdict = BH.admit(self.b.import_dir, pins={BF.RUNTIME_ID: release.public_key_digest(self.b.key.public_pem)})
         self.assertTrue(verdict.identity_verified, verdict.reasons)
         self.assertIsNone(verdict.incompatibility)
@@ -431,6 +445,10 @@ class AdmissionCase(Case):
 
 # -- AC-05, AC-06, AC-07 -------------------------------------------------------------------------------------------
 class LaunchCase(Case):
+    def setUp(self):
+        self.require_minimum_os()
+        super().setUp()
+
     def ready(self, handle="resource:t18"):
         installation = self.installation()
         repo, _ = self.product_line()
@@ -681,6 +699,10 @@ class LaunchCase(Case):
 
 # -- AC-08, AC-09 --------------------------------------------------------------------------------------------------
 class MinimalPathCase(Case):
+    def setUp(self):
+        self.require_minimum_os()
+        super().setUp()
+
     def test_ac08_minimal_path_through_the_installed_bundle(self):
         """AC-08 AC-09: acceptance through the bundle's serve-stdio, Definition to Published through its CLI, with new Agent and platform program versions mid-path; edges match feature-t7 AC-08."""
         from domain.acceptance.gitrepo import Repository
@@ -725,6 +747,38 @@ class MinimalPathCase(Case):
                                                                         pulls=[dict(number=p["number"], state=p["state"], head=p["head"]["sha"]) for p in pulls],
                                                                         versions=dict(agent="synthetic-agent 2.0", platform="synthetic-platform 2.0"),
                                                                         package=str(installation.package.name)), indent=1))
+
+
+# -- host minimumOs judgment behind the installation skips ---------------------------------------------------------
+class MinimumOsCase(unittest.TestCase):
+    """bundle_host.below_minimum_os with named Host versions; these cases build no bundle and need no inputs."""
+    MINIMUM = "26.6.2"
+
+    def test_a_host_below_minimum_os_gets_the_reason_with_both_versions(self):
+        """A Host below minimumOs (one patch below, an earlier major) is not satisfied; the reason names both versions."""
+        for host in ("26.6.1", "15.7.9"):
+            with self.subTest(host=host):
+                self.assertEqual(BH.below_minimum_os(self.MINIMUM, os_version=host),
+                                 "host macOS %s is below the bundle minimumOs 26.6.2" % host)
+
+    def test_a_host_equal_to_minimum_os_satisfies_it(self):
+        """A Host exactly at minimumOs is satisfied."""
+        self.assertIsNone(BH.below_minimum_os(self.MINIMUM, os_version="26.6.2"))
+
+    def test_a_host_above_minimum_os_satisfies_it(self):
+        """A Host above minimumOs (patch, minor, major; two-component versions as platform.mac_ver() reports them) is satisfied."""
+        for host in ("26.6.3", "26.7", "27.0"):
+            with self.subTest(host=host):
+                self.assertIsNone(BH.below_minimum_os(self.MINIMUM, os_version=host))
+
+    def test_without_a_named_version_this_host_is_read(self):
+        """Without os_version the judgment reads this machine's platform.mac_ver() and answers None or the reason text."""
+        result = BH.below_minimum_os(self.MINIMUM)
+        host = platform.mac_ver()[0] or "0"
+        self.assertTrue(result is None or isinstance(result, str), repr(result))
+        self.assertEqual(result is None, BH.os_at_least(host, self.MINIMUM))
+        if result is not None:
+            self.assertEqual(result, "host macOS %s is below the bundle minimumOs 26.6.2" % host)
 
 
 if __name__ == "__main__":
