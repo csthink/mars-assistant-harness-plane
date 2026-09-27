@@ -1,0 +1,193 @@
+{
+  "registry_schema": "review-channel-registry/v5",
+  "registry_revision": 7,
+  "defaults": {
+    "max_rounds": 2,
+    "timeout_seconds": 3600,
+    "effort": "high"
+  },
+  "system_default": {
+    "provider": "deepseek-official",
+    "model": "deepseek-v4-pro"
+  },
+  "providers": {
+    "deepseek-official": {
+      "display_name": "DeepSeek Official (via codex command line)",
+      "kind": "official-direct",
+      "runtime": "codex",
+      "transport": "responses",
+      "key_env": "DEEPSEEK_API_KEY",
+      "base_env": "DEEPSEEK_API_BASE",
+      "models": {
+        "deepseek-v4-pro": {
+          "claimed_vendor": "DeepSeek",
+          "default_effort": "high",
+          "supported_efforts": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "capability": {
+            "status": "CONFIGURED",
+            "note": "本仓通道各 Profile 自 CONFIGURED 起（设计 §11 第 3 条）；档案库通道的历史 Receipt 不作本仓能力证据。"
+          }
+        }
+      }
+    },
+    "codex-builtin": {
+      "display_name": "Codex Builtin (login session)",
+      "kind": "builtin-native",
+      "runtime": "codex",
+      "transport": "builtin",
+      "auth_source": "~/.codex/auth.json",
+      "models": {
+        "gpt-6-sol": {
+          "claimed_vendor": "OpenAI",
+          "default_effort": "high",
+          "supported_efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "capability": {
+            "status": "CONFIGURED",
+            "note": "本仓通道各 Profile 自 CONFIGURED 起（设计 §11 第 3 条）；正式评审按准入矩阵须 formal_review_authorized_by_owner = true（设计 §6.11），凭本仓受治理 Receipt 由 Human 独立提交再升级。"
+          }
+        }
+      }
+    },
+    "deepseek-http": {
+      "display_name": "DeepSeek Official (direct interface, OpenAI-compatible chat)",
+      "kind": "official-direct",
+      "runtime": "http",
+      "transport": "chat",
+      "key_env": "DEEPSEEK_API_KEY",
+      "base_env": "DEEPSEEK_API_BASE",
+      "structured_output": "json_object",
+      "models": {
+        "deepseek-v4-pro": {
+          "claimed_vendor": "DeepSeek",
+          "default_effort": "high",
+          "supported_efforts": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "max_input_bytes": 400000,
+          "capability": {
+            "status": "CONFIGURED",
+            "note": "max_input_bytes 为保守初值（设计 §16 不决定项）；调整只改本文件。"
+          }
+        }
+      }
+    },
+    "zhipu-official": {
+      "display_name": "Zhipu GLM Official (direct interface, OpenAI-compatible chat)",
+      "kind": "official-direct",
+      "runtime": "http",
+      "transport": "chat",
+      "key_env": "ZHIPU_API_KEY",
+      "base_env": "ZHIPU_API_BASE",
+      "structured_output": "json_object",
+      "models": {},
+      "note": "provider 已登记（设计 §6.11 vendors 表新增 Zhipu）；模型 slug 待 Human 登记后方可选用（设计 §16 不决定项）。"
+    },
+    "siliconflow": {
+      "display_name": "SiliconFlow (aggregator, OpenAI-compatible chat)",
+      "kind": "aggregator",
+      "runtime": "http",
+      "transport": "chat",
+      "key_env": "SILICONFLOW_API_KEY",
+      "base_env": "SILICONFLOW_API_BASE",
+      "structured_output": "json_object",
+      "models": {},
+      "note": "聚合商：模型 slug 与 registered_equivalents 须在付费调用前由 Human 登记（设计 §6.11）。"
+    },
+    "openrouter": {
+      "display_name": "OpenRouter (aggregator, OpenAI-compatible chat)",
+      "kind": "aggregator",
+      "runtime": "http",
+      "transport": "chat",
+      "key_env": "OPENROUTER_API_KEY",
+      "base_env": "OPENROUTER_API_BASE",
+      "structured_output": "json_object",
+      "models": {},
+      "note": "聚合商：模型 slug 与 registered_equivalents 须在付费调用前由 Human 登记（设计 §6.11）。"
+    }
+  },
+  "execution_ports": [
+    {
+      "id": "embedded",
+      "mode": "embedded",
+      "profile": {
+        "id": "review/codex-native-readonly",
+        "version": "1",
+        "digest": "8061614dbefcbb03bab19bb15b2c23a1427d4555ffadd06ea859bed8b83a5d63",
+        "trustModel": "current-user",
+        "purpose": "review",
+        "programIdentity": {
+          "launcher": "/opt/homebrew/Caskroom/codex/0.155.1/bin/codex",
+          "binaryDigest": "8eaf1ad12fe6bf89b1710330f58900014322c7c5af677e43be116d8ac5fc0a9e",
+          "version": "0.155.1"
+        },
+        "nativeApprovalPolicy": "expected-range-gate",
+        "configurationDigest": "8061614dbefcbb03bab19bb15b2c23a1427d4555ffadd06ea859bed8b83a5d63",
+        "capabilities": [
+          "read-only",
+          "native-approval",
+          "effort"
+        ],
+        "limitations": [
+          "no-write",
+          "no-network",
+          "no-mcp",
+          "no-subagents",
+          "single-turn",
+          "one-approval"
+        ],
+        "operations": [
+          "review"
+        ],
+        "maxContextBytes": 8388608,
+        "maxToolCalls": 20,
+        "maxRunSeconds": 600
+      },
+      "provider": "codex-builtin",
+      "model_ref": "gpt-6-sol",
+      "transport": "builtin",
+      "effort": "high",
+      "mapping_id": "j04-codex-openai",
+      "approval_policy": "expected-range-gate",
+      "applicability": {
+        "executionPort": "embedded",
+        "purpose": "review",
+        "trustModel": "current-user",
+        "profileDigest": "8061614dbefcbb03bab19bb15b2c23a1427d4555ffadd06ea859bed8b83a5d63",
+        "configurationRevision": "0",
+        "credentialRevision": "1"
+      },
+      "capability": {
+        "status": "CONFIGURED",
+        "evidence": null
+      }
+    }
+  ],
+  "model_mappings": [
+    {
+      "id": "j04-codex-openai",
+      "revision": 2,
+      "provider": "codex-builtin",
+      "model_ref": "gpt-6-sol",
+      "actual_models": [
+        "gpt-6-sol"
+      ],
+      "model_vendor": "OpenAI",
+      "route_vendor": null,
+      "allowed_sources": [
+        "protocol-init",
+        "protocol-result"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+.DS_Store
+
+# 本地暂存层（布局权威 §7）：过程性原始材料，永不入 git
+review-attempts/
+tasks/*/attempts/
+
+# Python 字节码缓存，由解释器生成，不入 git
+__pycache__/
+
+# 产品源码的本地虚拟环境（apps/harness/README.md），不入 git
+apps/harness/.venv/
