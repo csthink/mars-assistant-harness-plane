@@ -51,6 +51,8 @@ apps/harness/.venv/bin/python -B -E -s -S -X pycache_prefix="$(mktemp -d)" mecha
 
 完整产品测试包含 Runtime 开发 bundle 的用例，需要 `HP_BUNDLE_INPUTS_DIR` 与 `HP_BUNDLE_OPENSSL` 两个环境变量；缺少时这些用例报 ERROR 并写明变量名。准备方法见 README「测试」一节。依赖某个产品线仓实例区的少数用例在 `HARNESS_INSTANCE_ROOT` 未设置时以明确原因 skip，CI 也不设置它。
 
+`test_bundle` 中安装或启动 bundle 的用例要求本机 macOS 不低于 bundle manifest 的 `minimumOs`（`apps/harness/bundle/manifest.py` 的 `MINIMUM_OS`），低于时以 `host macOS <版本> is below the bundle minimumOs <版本>` 为原因 skip。CI 的 runner 镜像低于该版本时这些用例在 CI 上同样 skip，所以改到 Runtime 开发 bundle 时须在满足该版本的机器上运行 `test_bundle`。
+
 ## 改动检查清单
 
 | 改动类型 | 必须说明或验证 |
@@ -60,7 +62,7 @@ apps/harness/.venv/bin/python -B -E -s -S -X pycache_prefix="$(mktemp -d)" mecha
 | 领域命令（`apps/harness/domain/` 其余子包与 `apps/harness/cli/`） | CLI 与 Runtime action 仍调用同一个领域命令；结果码闭集与退出码的变化写进 `apps/harness/README.md` |
 | 执行端口（`apps/harness/execution/`） | 嵌入模式不二次启动 Agent；程序身份每次执行重新发现并记录；取消、超时与未知结果不自动释放预约 |
 | Policy Gate（`apps/harness/domain/policy/`） | 仍是 Policy Decision 的唯一产生点；输入缺失、不可读或身份不符时不产生 ALLOW |
-| Runtime 开发 bundle（`apps/harness/bundle/`、`apps/harness/runtime/launch.py`） | 带 `HP_BUNDLE_INPUTS_DIR` 与 `HP_BUNDLE_OPENSSL` 运行 `test_bundle` 通过；同一提交与输入两次构建逐字节相同 |
+| Runtime 开发 bundle（`apps/harness/bundle/`、`apps/harness/runtime/launch.py`） | 在 macOS 不低于 bundle `minimumOs` 的机器上带 `HP_BUNDLE_INPUTS_DIR` 与 `HP_BUNDLE_OPENSSL` 运行 `test_bundle` 通过，且没有以 `minimumOs` 为原因的 skip；同一提交与输入两次构建逐字节相同 |
 | 机制单元（`mechanisms/<单元>/`） | 该单元的 selftest 通过；行为变化同步到单元目录内的设计正本 |
 | Agent skill（`.agents/skills/`） | 只改中立正本；各家 Agent 的专属目录只做加载，不另存副本 |
 | 依赖（`apps/harness/requirements.lock`） | 每项带散列；`inputs.lock.json` 的 wheel 身份同步；完整产品测试通过 |

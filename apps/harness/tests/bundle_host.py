@@ -176,6 +176,18 @@ def os_at_least(actual, minimum):
     return True
 
 
+def below_minimum_os(minimum_os, os_version=None):
+    """Why this Host's macOS is below a bundle's minimumOs, or None when it satisfies it.
+
+    The comparison is the one admission step 7 makes, with the Host version read the same way (os_version, else
+    platform.mac_ver()); os_version lets a test name the Host version instead of reading this machine's.
+    """
+    host_os = os_version or platform.mac_ver()[0] or "0"
+    if os_at_least(host_os, minimum_os):
+        return None
+    return "host macOS %s is below the bundle minimumOs %s" % (host_os, minimum_os)
+
+
 class Verdict:
     def __init__(self):
         self.failures, self.identity_verified, self.incompatibility = {}, False, None

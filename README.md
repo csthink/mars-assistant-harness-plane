@@ -26,6 +26,7 @@ hp 可以经 Runtime Contract 0.1.0 被图形客户端连接，Assistant 的 mac
 ## 环境
 
 - CPython 3.12，macOS arm64。`apps/harness/requirements.lock` 以 SHA-256 固定全部直接与传递依赖；其中 `rpds-py` 只登记了 CPython 3.12 macOS arm64 的 wheel，在其他平台上 `--require-hashes` 安装会失败。
+- macOS 版本。`test_bundle` 中安装或启动 Runtime 开发 bundle 的用例要求本机 macOS 不低于 bundle manifest 的 `minimumOs`（`apps/harness/bundle/manifest.py` 的 `MINIMUM_OS`），与接收方准入的判定相同；低于时这些用例以 `host macOS <版本> is below the bundle minimumOs <版本>` 为原因 skip，其余用例照常运行。
 - Git。Domain Core 的正式状态保存在被治理仓库的 Git 对象里，测试也在临时目录中创建合成 Git 仓。
 - 依赖装在仓内独立的虚拟环境 `apps/harness/.venv/`（已被忽略），不修改全局 Python；Runtime 启动时不下载任何东西。
 
@@ -123,11 +124,13 @@ apps/harness/.venv/bin/python -m pip download --require-hashes --no-deps --only-
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) 在 push 到 `main` 与目标为 `main` 的 pull request 上运行，只有一个 job，名为 `verify`：
 
 1. 公开仓安全检查：先跑扫描器自身的阳性对照 `--selftest`，再扫描本仓已跟踪的全部内容。CI 与 pre-commit hook 调用的是同一个文件。
-2. 在 macOS arm64 runner 上安装 CPython 3.12，按 `requirements.lock` 带散列安装依赖。
+2. 在 macOS arm64 runner（`macos-26`）上安装 CPython 3.12，按 `requirements.lock` 带散列安装依赖。
 3. 准备 Runtime 开发 bundle 的构建输入（固定摘要的解释器资产与 wheel）和 OpenSSL 3。
 4. 产品测试、Runtime Contract 符合性报告、全部机制单元 selftest。
 
 CI 不设置 `HARNESS_INSTANCE_ROOT` 与 `HARNESS_INSTANCE_RECORDS`，不调用真实模型，不引用任何 secret，token 权限只有 `contents: read`。测试报告只写在 runner 的临时目录里，不作为 artifact 上传。
+
+runner 镜像的 macOS 低于 bundle 的 `minimumOs` 时，产品测试与符合性报告中安装或启动 bundle 的用例以 `host macOS <版本> is below the bundle minimumOs <版本>` 为原因 skip（见「环境」）。这部分覆盖只在满足该版本的机器上取得，由维护者在本机运行完整套件并留存验证记录。
 
 ## 文档
 

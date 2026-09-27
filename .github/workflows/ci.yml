@@ -23,7 +23,7 @@ jobs:
     name: verify
     # apps/harness/requirements.lock 只登记了 CPython 3.12 macOS arm64 的 rpds-py wheel 散列，
     # Runtime 开发 bundle 的固定解释器资产也是 aarch64-apple-darwin，所以用 macOS arm64 runner。
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 150
     env:
       PY: apps/harness/.venv/bin/python
@@ -80,6 +80,10 @@ jobs:
           echo "HP_BUNDLE_INPUTS_DIR=$inputs" >> "$GITHUB_ENV"
           echo "HP_BUNDLE_OPENSSL=$openssl_program" >> "$GITHUB_ENV"
 
+      # test_bundle 中安装或启动 bundle 的用例要求宿主 macOS 不低于 bundle manifest 的 minimumOs
+      # （apps/harness/bundle/manifest.py 的 MINIMUM_OS），与接收方准入的判定相同。runner 镜像低于它时，
+      # 这些用例以 "host macOS <版本> is below the bundle minimumOs <版本>" 为原因 skip，其余用例照常运行；
+      # 这部分覆盖只在满足该版本的机器上取得，由维护者在本机运行完整套件并留存验证记录。
       - name: Product tests
         run: |
           "$PY" -B -m unittest discover -s apps/harness/tests -p 'test_*.py' -v
