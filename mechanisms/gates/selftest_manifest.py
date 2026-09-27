@@ -1,0 +1,33 @@
+"""manifest 实际规则正负例，由隔离测试运行。"""
+
+FIXTURES = [
+    {"id": "manifest-mechanisms-generated-pos", "rule_id": "mechanisms-generated",
+     "kind": "positive", "expect": "PASS",
+     "setup": [{"action": "manifest_baseline"},
+               {"action": "run_manifest_write"}]},
+    {"id": "manifest-mechanisms-generated-neg", "rule_id": "mechanisms-generated",
+     "kind": "negative", "expect": "VIOLATION",
+     "setup": [{"action": "manifest_baseline"},
+               {"action": "run_manifest_write"},
+               {"action": "append_file", "path": "mechanisms/MECHANISMS.md",
+                "content": "手改一行\n"}]},
+    {"id": "manifest-readme-generated-pos", "rule_id": "readme-generated",
+     "kind": "positive", "expect": "PASS",
+     "setup": [{"action": "manifest_baseline"},
+               {"action": "run_manifest_write"}]},
+    {"id": "manifest-readme-generated-neg", "rule_id": "readme-generated",
+     "kind": "negative", "expect": "VIOLATION",
+     "setup": [{"action": "manifest_baseline"},
+               {"action": "run_manifest_write"},
+               {"action": "append_file", "path": "README.md", "content": "手改一行\n"}]},
+
+    {"id": "manifest-readme-data-complete-pos", "rule_id": "readme-data-complete",
+     "kind": "positive", "expect": "PASS",
+     "setup": [{"action": "manifest_baseline"},
+               {"action": "run_manifest_write"}]},
+    {"id": "manifest-readme-data-complete-neg", "rule_id": "readme-data-complete",
+     "kind": "negative", "expect": "VIOLATION",
+     "setup": [{"action": "manifest_baseline"},
+               {"action": "run_manifest_write"},
+               {"action": "write_file", "path": "newtop/x.txt", "content": "x\n"}]},
+]

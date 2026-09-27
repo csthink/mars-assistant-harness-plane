@@ -1,0 +1,18 @@
+{
+  "top_level": {
+    ".agents": {"zone": "机制区", "gloss": "中立能力正本（内置 skills 等），随载荷分发"},
+    ".claude": {"zone": "三区之外的适配层", "gloss": "Claude Code 的发现指针，指向 .agents/、不是副本"},
+    "HANDOFF": {"zone": "实例区", "gloss": "会话交接与执行记录协议实例（gov-t26 交付，正本 = mechanisms/handoff-protocol）"},
+    "apps": {"zone": "机制区", "gloss": "产品源码区：编排 CLI 与 web 插件"},
+    "authority": {"zone": "实例区", "gloss": "重立权威件"},
+    "changelog": {"zone": "实例区", "gloss": "冻结基线的 amendment 记录"},
+    "decisions": {"zone": "实例区", "gloss": "公共技术 Decision"},
+    "mechanisms": {"zone": "机制区", "gloss": "机制单元（一单元一目录）与单元花名册；分发载荷本体"},
+    "records": {"zone": "实例区", "gloss": "本仓治理记录：founding/、governance/<subject>/、诊断与 lineage"},
+    "review-attempts": {"zone": "本地暂存", "gloss": "过程性原始材料，永不入 git"},
+    "reviews": {"zone": "证据区", "gloss": "subject 轴评审证据 reviews/<subject>/<round>/"},
+    "sdd": {"zone": "实例区", "gloss": "必需规格链：proposal.md · spec.md · milestones.md；architecture.md 为按需工程说明"},
+    "tasks": {"zone": "实例区", "gloss": "任务记录 tasks/<task-id>/（契约、裁定、评审、本地暂存）"},
+    "ui": {"zone": "实例区", "gloss": "UI design lineage"}
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "registry_schema": "review-channel-registry/v3",
+  "registry_revision": 1,
+  "defaults": {
+    "max_rounds": 2,
+    "timeout_seconds": 60,
+    "effort": "high"
+  },
+  "system_default": {
+    "provider": "fake-official",
+    "model": "fake-model"
+  },
+  "providers": {
+    "fake-official": {
+      "display_name": "Fake Official",
+      "kind": "official-direct",
+      "runtime": "fake",
+      "transport": "responses",
+      "key_env": "FAKE_API_KEY",
+      "base_env": "FAKE_API_BASE",
+      "models": {
+        "fake-model": {
+          "claimed_vendor": "DeepSeek",
+          "default_effort": "high",
+          "supported_efforts": ["low", "high"],
+          "capability": {"status": "CONFIGURED"}
+        },
+        "fake-openai": {
+          "claimed_vendor": "OpenAI",
+          "default_effort": "high",
+          "supported_efforts": ["high"],
+          "capability": {"status": "CONFIGURED"}
+        }
+      }
+    },
+    "fake-aggregator": {
+      "display_name": "Fake Aggregator",
+      "kind": "aggregator",
+      "runtime": "fake",
+      "transport": "chat",
+      "key_env": "FAKE_API_KEY",
+      "base_env": "FAKE_API_BASE",
+      "models": {
+        "agg-model": {
+          "claimed_vendor": "DeepSeek",
+          "default_effort": "high",
+          "supported_efforts": ["high"],
+          "registered_equivalents": {"agg-model": "upstream/agg-model-v1"},
+          "capability": {"status": "CONFIGURED"}
+        }
+      }
+    },
+    "fake-inline": {
+      "display_name": "Fake Inline (direct interface)",
+      "kind": "official-direct",
+      "runtime": "fakeinline",
+      "transport": "chat",
+      "key_env": "FAKE_API_KEY",
+      "base_env": "FAKE_API_BASE",
+      "structured_output": "json_object",
+      "models": {
+        "inline-model": {
+          "claimed_vendor": "Zhipu",
+          "default_effort": "high",
+          "supported_efforts": ["high"],
+          "max_input_bytes": 200000,
+          "capability": {"status": "CONFIGURED"}
+        }
+      }
+    }
+  }
+}

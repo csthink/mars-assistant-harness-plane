@@ -1,0 +1,37 @@
+{
+ "schema": "hp-bundle-inputs/v1",
+ "note": "Third-party build inputs of the Runtime development bundle, fixed by digest. The builder reads them only from the inputs directory the caller names and never downloads. Wheel identities are the hashes of apps/harness/requirements.lock at the same source commit.",
+ "interpreter": {
+  "project": "python-build-standalone",
+  "releaseTag": "20260901",
+  "asset": "cpython-3.12.14+20260901-aarch64-apple-darwin-install_only_stripped.tar.gz",
+  "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-aarch64-apple-darwin-install_only_stripped.tar.gz",
+  "bytes": 24981445,
+  "sha256": "81a359f1cfadd4da11766534c5913791cea55f26e1bb902cacd2a531bb1e4b2b",
+  "pythonVersion": "3.12.14",
+  "cacheLayout": "<inputs>/python-build-standalone/<releaseTag>/<asset>",
+  "entrypoint": "python/bin/python3.12",
+  "include": ["python/bin/python3.12", "python/lib/python3.12/"],
+  "exclude": [
+   "python/lib/python3.12/site-packages/",
+   "python/lib/python3.12/ensurepip/",
+   "python/lib/python3.12/idlelib/",
+   "python/lib/python3.12/tkinter/",
+   "python/lib/python3.12/turtledemo/",
+   "python/lib/python3.12/turtle.py",
+   "python/lib/python3.12/lib2to3/",
+   "python/lib/python3.12/config-3.12-darwin/",
+   "python/lib/python3.12/test/",
+   "python/lib/python3.12/lib-dynload/_tkinter.",
+   "__pycache__/",
+   ".pyc"
+  ],
+  "excludeReasons": "symbolic links are never members; pip and ensurepip (no installation happens in the bundle); Tk and IDLE (no GUI, their Tcl/Tk libraries are not members); lib2to3 and the build configuration directory (no source conversion or extension builds); test packages and bytecode (the Runtime runs with -B)"
+ },
+ "wheels": {
+  "source": "apps/harness/requirements.lock",
+  "cacheLayout": "<inputs>/wheels/<wheel file>",
+  "index": "https://pypi.org/simple",
+  "install": "wheel entries are unpacked unchanged under python/lib/python3.12/site-packages/; a wheel with a .data directory is refused"
+ }
+}

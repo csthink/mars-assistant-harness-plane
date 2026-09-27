@@ -1,0 +1,1208 @@
+[
+  {
+    "id": "M01-verdict-pass-with-blocking",
+    "file": "review_channel_verdict.py",
+    "find": "    if verdict == \"PASS\" and blocking:\n        add(\"other\", \"PASS with blocking findings\")\n",
+    "replace": "",
+    "must_fail": [
+      "verdict.fourteen-rules"
+    ]
+  },
+  {
+    "id": "M02-verdict-raw-html-allowed",
+    "file": "review_channel_verdict.py",
+    "find": "    if html:\n        add(\"narrative\", \"raw HTML line in narrative: %r\" % html[0][:40])\n",
+    "replace": "",
+    "must_fail": [
+      "verdict.fourteen-rules"
+    ]
+  },
+  {
+    "id": "M03-verdict-json-bytes-reencoded",
+    "file": "review_channel_verdict.py",
+    "find": "        cand[\"json_bytes\"] = text[brace:end]",
+    "replace": "        cand[\"json_bytes\"] = json.dumps(_value, ensure_ascii=False)",
+    "must_fail": [
+      "verdict.envelope-tiers"
+    ]
+  },
+  {
+    "id": "M04-request-bool-as-int",
+    "file": "review_channel_base.py",
+    "find": "def is_strict_int(value):\n    return type(value) is int",
+    "replace": "def is_strict_int(value):\n    return isinstance(value, int)",
+    "must_fail": [
+      "request.total-closure",
+      "base.strict-json"
+    ]
+  },
+  {
+    "id": "M05-vendor-case-insensitive",
+    "file": "review_channel_request.py",
+    "find": "        if a[\"vendor\"] not in C.VENDORS:",
+    "replace": "        if a[\"vendor\"].lower() not in [v.lower() for v in C.VENDORS]:",
+    "must_fail": [
+      "request.vendors"
+    ]
+  },
+  {
+    "id": "M06-eligibility-inverted",
+    "file": "review_channel_selection.py",
+    "find": "    if reviewer_vendor in vendors:\n        raise base.PreflightError(\"eligibility\"",
+    "replace": "    if False:\n        raise base.PreflightError(\"eligibility\"",
+    "must_fail": [
+      "selection.eligibility",
+      "channel.failures-classification"
+    ]
+  },
+  {
+    "id": "M07-budget-never-exhausted",
+    "file": "review_channel_selection.py",
+    "find": "\"submitted_rounds\": submitted, \"exhausted\": submitted >= allowed}",
+    "replace": "\"submitted_rounds\": submitted, \"exhausted\": False}",
+    "must_fail": [
+      "selection.rounds-budget",
+      "channel.review-paths"
+    ]
+  },
+  {
+    "id": "M08-forbidden-name-not-renamed",
+    "file": "review_channel_inputs.py",
+    "find": "        if name in C.FORBIDDEN_BUNDLE_NAMES:\n            name = C.RENAME_PREFIX + name\n            generated = True\n",
+    "replace": "",
+    "must_fail": [
+      "inputs.sealing",
+      "inputs.bundle-names"
+    ]
+  },
+  {
+    "id": "M09-call-path-always-proven",
+    "file": "review_channel_contract.py",
+    "find": "    if any(v == \"NOT_PROVEN\" for v in values):\n        return \"NOT_PROVEN\"\n    return \"INDETERMINATE\"",
+    "replace": "    return \"PROVEN\"",
+    "must_fail": [
+      "contract.aggregation",
+      "receipt.aggregation-reduction"
+    ]
+  },
+  {
+    "id": "M10-receipt-ref-blob-check-removed",
+    "file": "review_channel_registry.py",
+    "find": "        E.require(base.sha256_bytes(work)==cap['receipt_sha256'],'committed Receipt hash differs')\n",
+    "replace": "",
+    "must_fail": [
+      "registry.receipt-ref"
+    ]
+  },
+  {
+    "id": "M11-publish-ignores-occupied-target",
+    "file": "review_channel.py",
+    "find": "            if exists or H.items(repo_root, tracked+\"/\"):\n                _stderr(\"tracked-round-dir-occupied",
+    "replace": "            if False:\n                _stderr(\"tracked-round-dir-occupied",
+    "must_fail": [
+      "channel.concurrency-occupied",
+      "channel.derivation-static"
+    ]
+  },
+  {
+    "id": "M12-zshrc-double-quote-accepts-dollar",
+    "file": "review_channel_secrets.py",
+    "find": "_DOUBLE_QUOTED_RE = re.compile(r'^\"[^\"$`\\\\]*\"$')",
+    "replace": "_DOUBLE_QUOTED_RE = re.compile(r'^\"[^\"`\\\\]*\"$')",
+    "must_fail": [
+      "secrets.literals"
+    ]
+  },
+  {
+    "id": "M13-reemit-invariance-skipped",
+    "file": "review_channel.py",
+    "find": "            if mismatched:\n                extraction[\"invariance_check\"] = {\"status\": \"mismatch\", \"mismatched_fields\": mismatched}",
+    "replace": "            if False:\n                extraction[\"invariance_check\"] = {\"status\": \"mismatch\", \"mismatched_fields\": mismatched}",
+    "must_fail": [
+      "channel.reemission"
+    ]
+  },
+  {
+    "id": "M14-secret-scrub-disabled",
+    "file": "review_channel_base.py",
+    "find": "            if value and value in data:\n                hit = changed = True\n                data = data.replace(value, REDACTED)\n",
+    "replace": "            pass\n",
+    "must_fail": [
+      "base.secret-scrub",
+      "channel.failures-classification"
+    ]
+  },
+  {
+    "id": "M15-protected-prefix-list-emptied",
+    "file": "adapters/codex.py",
+    "find": "        if head in PROTECTED_PREFIXES or key in PROTECTED_PREFIXES:",
+    "replace": "        if False:",
+    "must_fail": [
+      "adapter.codex.config-argv-overrides"
+    ]
+  },
+  {
+    "id": "M16-interrupted-synthesis-skipped",
+    "file": "review_channel.py",
+    "find": "        receipt = RC.synthesize_interrupted(att, recoverer)\n        data = base.pretty_json(receipt)",
+    "replace": "        continue\n        data = None",
+    "must_fail": [
+      "channel.crash-recovery"
+    ]
+  },
+  {
+    "id": "M17-closer-lenient",
+    "file": "review_channel_verdict.py",
+    "find": "_CLOSER_RE = re.compile(r\"^(`{3})[ \\t]*$\")",
+    "replace": "_CLOSER_RE = re.compile(r\"^ {0,3}(`{3,})[ \\t]*$\")",
+    "must_fail": [
+      "verdict.envelope-tiers"
+    ]
+  },
+  {
+    "id": "M18-review-skip-type-substring",
+    "file": "review_channel_selection.py",
+    "find": "        if not typ or typ[0][len(\"> Type:\"):].strip() != \"review-skip\":",
+    "replace": "        if not typ or \"review-skip\" not in typ[0]:",
+    "must_fail": [
+      "selection.rounds-budget"
+    ]
+  },
+  {
+    "id": "M19-probe-report-ignores-downgrade",
+    "file": "review_channel.py",
+    "find": "    classification = st[\"classification\"]\n    _report({\"attempt_id\": attempt.attempt_id, \"classification\": classification, \"failure_code\": st[\"failure_code\"],",
+    "replace": "    _report({\"attempt_id\": attempt.attempt_id, \"classification\": classification, \"failure_code\": st[\"failure_code\"],",
+    "must_fail": [
+      "channel.probe-preflight"
+    ]
+  },
+  {
+    "id": "M20-called-synthesis-recomputed",
+    "file": "review_channel_receipt.py",
+    "find": "        dims = (att[\"call_path_proof\"], att[\"profile_binding\"], \"NOT_REACHED\")",
+    "replace": "        dims = aggregate_dims(calls) + (\"NOT_REACHED\",)",
+    "must_fail": [
+      "receipt.interrupted-synthesis"
+    ]
+  },
+  {
+    "id": "M21-codex-workspace-kept",
+    "file": "adapters/codex.py",
+    "find": "        destroy_workspace(call_dir)\n\n\ndef _unlock(",
+    "replace": "        pass\n\n\ndef _unlock(",
+    "must_fail": [
+      "adapter.codex.recognition-run-offline",
+      "adapter.codex.builtin-auth-staging"
+    ]
+  },
+  {
+    "id": "M22-call-record-shape-unchecked",
+    "file": "review_channel_receipt.py",
+    "find": "                probs = call_record_problems(c)\n",
+    "replace": "                probs = []\n",
+    "must_fail": [
+      "receipt.profile-groups",
+      "registry.receipt-ref"
+    ]
+  },
+  {
+    "id": "M23-probe-success-ignores-binding",
+    "file": "review_channel.py",
+    "find": "    bound = st[\"call_path_proof\"] == \"PROVEN\" and st[\"profile_binding\"] == \"SUFFICIENT\" and result[\"failure\"] is None",
+    "replace": "    bound = st[\"call_path_proof\"] == \"PROVEN\" and result[\"failure\"] is None",
+    "must_fail": [
+      "channel.probe-preflight"
+    ]
+  },
+  {
+    "id": "M24-duplicate-section-allowed",
+    "file": "review_channel_verdict.py",
+    "find": "            if rec[\"has_question_section\"]:\n                problems.append(",
+    "replace": "            if False:\n                problems.append(",
+    "must_fail": [
+      "verdict.fourteen-rules"
+    ]
+  },
+  {
+    "id": "M25-call-group-reduction-unchecked",
+    "file": "review_channel_receipt.py",
+    "find": "                    if prof[k] != cg_expected[k]:",
+    "replace": "                    if False:",
+    "must_fail": [
+      "receipt.profile-groups"
+    ]
+  },
+  {
+    "id": "M26-candidate-binding-dropped",
+    "file": "review_channel_inputs.py",
+    "find": "        if role == \"candidate\" and candidate_bytes is not None and rel in candidate_bytes and data != candidate_bytes[rel]:",
+    "replace": "        if False:",
+    "must_fail": [
+      "inputs.sealing"
+    ]
+  },
+  {
+    "id": "M27-workspace-residue-silent",
+    "file": "adapters/codex.py",
+    "find": "    if residue:\n        raise RuntimeError(",
+    "replace": "    if False:\n        raise RuntimeError(",
+    "must_fail": [
+      "adapter.codex.recognition-run-offline"
+    ]
+  },
+  {
+    "id": "M28-empty-overrides-inherit",
+    "file": "review_channel_selection.py",
+    "find": "    if request[\"runtime_overrides\"] is not None:",
+    "replace": "    if request[\"runtime_overrides\"]:",
+    "must_fail": [
+      "selection.levels-inheritance-drift"
+    ]
+  },
+  {
+    "id": "M29-cleanup-race-escapes",
+    "file": "review_channel.py",
+    "find": "    except FileNotFoundError:\n        report.append(dict(entry, action=entry[\"action\"] + \"-by-concurrent-recoverer\"))\n        return",
+    "replace": "    except KeyError:\n        return",
+    "must_fail": [
+      "channel.crash-recovery"
+    ]
+  },
+  {
+    "id": "M30-residue-not-unlocked",
+    "file": "adapters/codex.py",
+    "find": "            _unlock(path)\n            try:\n                with open(path, \"r+b\") as f:",
+    "replace": "            try:\n                with open(path, \"r+b\") as f:",
+    "must_fail": [
+      "adapter.codex.recognition-run-offline"
+    ]
+  },
+  {
+    "id": "M32-registered-equivalent-substring",
+    "file": "review_channel_runtime.py",
+    "find": "    if (isinstance(registered, str) and claim == registered) or \\\n            (isinstance(registered, list) and any(isinstance(x, str) and claim == x for x in registered)):",
+    "replace": "    if registered == claim or claim in (registered or []):",
+    "must_fail": [
+      "receipt.call-record-keys"
+    ]
+  },
+  {
+    "id": "M33-diagnostic-secret-ignored",
+    "file": "review_channel.py",
+    "find": "    secret_now = output_secret_hit or st[\"diagnostics\"][\"secret_leak_redacted\"]\n    block, classified = _validate_block(pf, rq, json_bytes, narrative, secret_now)\n    problems = [m for _c, m in classified]\n    # ---- 校验类补发",
+    "replace": "    secret_now = output_secret_hit\n    block, classified = _validate_block(pf, rq, json_bytes, narrative, secret_now)\n    problems = [m for _c, m in classified]\n    # ---- 校验类补发",
+    "must_fail": [
+      "channel.failures-classification"
+    ]
+  },
+  {
+    "id": "M34-http-overrides-accepted",
+    "file": "adapters/http.py",
+    "find": "    if ctx.get(\"overrides\"):\n        raise base.PreflightError(\"runtime-key-unrecognized\",",
+    "replace": "    if False:\n        raise base.PreflightError(\"runtime-key-unrecognized\",",
+    "must_fail": [
+      "adapter.http.loopback-run"
+    ]
+  },
+  {
+    "id": "M36-empty-snapshot-provenance-lost",
+    "file": "review_channel_selection.py",
+    "find": "    elif inherited:\n        # R5-B8",
+    "replace": "    elif inherited and prev_prof.get(\"runtime_overrides\"):\n        # R5-B8",
+    "must_fail": [
+      "selection.levels-inheritance-drift"
+    ]
+  },
+  {
+    "id": "M38-response-model-unchecked",
+    "file": "review_channel_receipt.py",
+    "find": "    if requested_model is not None and c[\"response_model\"] is not None:",
+    "replace": "    if False:",
+    "must_fail": [
+      "receipt.profile-groups"
+    ]
+  },
+  {
+    "id": "M39-seal-scan-after-write",
+    "file": "review_channel_inputs.py",
+    "find": "    if scan_set is not None and base.contains_secret(data, scan_set):",
+    "replace": "    if False:",
+    "must_fail": [
+      "inputs.sealing",
+      "channel.failures-classification"
+    ]
+  },
+  {
+    "id": "M41-leak-not-invalidating-failures",
+    "file": "review_channel.py",
+    "find": "    if st[\"mode\"] == \"review\" and st[\"calls\"] and st[\"diagnostics\"][\"secret_leak_redacted\"] and st[\"verdict_validation\"] != \"INVALID\":",
+    "replace": "    if False:",
+    "must_fail": [
+      "channel.failures-classification"
+    ]
+  },
+  {
+    "id": "M42-redirects-followed",
+    "file": "adapters/http.py",
+    "find": "OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())",
+    "replace": "OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))",
+    "must_fail": [
+      "adapter.http.loopback-run"
+    ]
+  },
+  {
+    "id": "M43-pre-scan-hit-ignored",
+    "file": "review_channel.py",
+    "find": "    request_hit = base.contains_secret(raw, pre_scan)\n    attempt = Attempt(repo_root, routing, mode, raw, opts)",
+    "replace": "    request_hit = False\n    attempt = Attempt(repo_root, routing, mode, raw, opts)",
+    "must_fail": [
+      "channel.failures-classification"
+    ]
+  },
+  {
+    "id": "M44-evidence-hit-keeps-not-reached",
+    "file": "review_channel.py",
+    "find": "        if st[\"mode\"] == \"review\" and st[\"calls\"] and st[\"verdict_validation\"] != \"INVALID\":\n            st[\"verdict_validation\"] = \"INVALID\"\n            st[\"verdict_problems\"] = list(st[\"verdict_problems\"]) + [\"secret material detected in receipt evidence fields\"]",
+    "replace": "        if False:\n            st[\"verdict_validation\"] = \"INVALID\"\n            st[\"verdict_problems\"] = list(st[\"verdict_problems\"]) + [\"secret material detected in receipt evidence fields\"]",
+    "must_fail": [
+      "channel.failures-classification"
+    ]
+  },
+  {
+    "id": "M45-union-scan-all-or-nothing",
+    "file": "review_channel_secrets.py",
+    "find": "                        values, _report = resolve_env_names([name], zshrc_path)",
+    "replace": "                        values, _report = resolve_env_names([prov[\"key_env\"], prov[\"base_env\"]], zshrc_path)",
+    "must_fail": [
+      "secrets.union-scan"
+    ]
+  },
+  {
+    "id": "M46-registry-not-from-repo-root",
+    "file": "review_channel.py",
+    "find": "        return os.path.join(self.repo_root, REGISTRY_REL)",
+    "replace": "        return G.REGISTRY_FILE",
+    "must_fail": [
+      "channel.probe-preflight"
+    ]
+  },
+  {
+    "id": "M47-fence-before-verdict-accepted",
+    "file": "review_channel_verdict.py",
+    "find": "    lines = narrative.split(\"\\n\")\n    problems = []",
+    "replace": "    lines = strip_fences(narrative)\n    problems = []",
+    "must_fail": [
+      "verdict.fourteen-rules"
+    ]
+  },
+  {
+    "id": "M50-manifest-hash-trusted",
+    "file": "review_channel_selection.py",
+    "find": "    if not isinstance(manifest.get(\"inputs\"), list) or base.sha256_bytes(base.canonical_json(manifest[\"inputs\"])) != manifest[\"manifest_sha256\"]:",
+    "replace": "    if False:",
+    "must_fail": [
+      "selection.previous-anchoring"
+    ]
+  },
+  {
+    "id": "M51-output-unscrubbed",
+    "file": "review_channel.py",
+    "find": "    values = scan()\n    data, _hit = base.scrub_secrets(text.encode(\"utf-8\"), values)\n",
+    "replace": "    return text\n    values = scan()\n    data, _hit = base.scrub_secrets(text.encode(\"utf-8\"), values)\n",
+    "must_fail": [
+      "channel.failures-classification"
+    ]
+  },
+  {
+    "id": "M52-operand-check-removed",
+    "file": "review_channel.py",
+    "find": "        if a in (\"--request\", \"--repo-root\", \"--decisions\") and i + 1 >= len(argv):",
+    "replace": "        if False:",
+    "must_fail": [
+      "channel.unrouteable-startup"
+    ]
+  },
+  {
+    "id": "M53-scrubber-armed-late",
+    "file": "review_channel.py",
+    "find": "        _OUTPUT_SCRUB.scan = self.secrets.scan_set   # R11-B1",
+    "replace": "        pass   # R11-B1",
+    "must_fail": [
+      "channel.failures-classification"
+    ]
+  },
+  {
+    "id": "M54-unclosed-fence-strips",
+    "file": "review_channel_verdict.py",
+    "find": "        i = j + 1 if j < len(lines) else i + 1\n    return [ln for k, ln in enumerate(lines) if k not in closed]",
+    "replace": "        closed.update(range(i, len(lines)))\n        i = j + 1 if j < len(lines) else i + 1\n    return [ln for k, ln in enumerate(lines) if k not in closed]",
+    "must_fail": [
+      "verdict.fourteen-rules"
+    ]
+  },
+  {
+    "id": "M55-second-fence-in-narrative",
+    "file": "review_channel_verdict.py",
+    "find": "    if any(_OPENER_RE.match(ln) for ln in narrative.split(\"\\n\")):",
+    "replace": "    if False:",
+    "must_fail": [
+      "verdict.fourteen-rules",
+      "verdict.wrapper-spans"
+    ]
+  },
+  {
+    "id": "M56-classify-normalizes-whole-message",
+    "file": "review_channel_verdict.py",
+    "find": "    candidates, narrative = partition(text)\n    # 候选块之外开头的纯空行属信封间隔",
+    "replace": "    text = normalize_lines(text)\n    candidates, narrative = partition(text)\n    # 候选块之外开头的纯空行属信封间隔",
+    "must_fail": [
+      "verdict.envelope-tiers"
+    ]
+  },
+  {
+    "id": "M57-backtick-info-string-fence",
+    "file": "review_channel_verdict.py",
+    "find": "    if m and m.group(2)[0] == \"`\" and \"`\" in m.group(3):\n        return None",
+    "replace": "    if False:\n        return None",
+    "must_fail": [
+      "verdict.fourteen-rules"
+    ]
+  },
+  {
+    "id": "M58-line-endings-unnormalized",
+    "file": "review_channel_verdict.py",
+    "find": "    return _LINE_END_RE.sub(\"\\n\", text)",
+    "replace": "    return text",
+    "must_fail": [
+      "verdict.fourteen-rules"
+    ]
+  },
+  {
+    "id": "M59-lf-only-line-split",
+    "file": "review_channel_verdict.py",
+    "find": "    for m in _LINE_END_RE.finditer(text):",
+    "replace": "    for m in re.finditer(r\"\\n\", text):",
+    "must_fail": [
+      "verdict.envelope-tiers"
+    ]
+  },
+  {
+    "id": "M60-verdict-path-type-unchecked",
+    "file": "review_channel_receipt.py",
+    "find": "    if prof[\"verdict_path\"] is not None and not base.is_nonempty_str(prof[\"verdict_path\"]):",
+    "replace": "    if False:",
+    "must_fail": [
+      "receipt.profile-groups"
+    ]
+  },
+  {
+    "id": "M61-invalid-not-recorded-before-receipt",
+    "file": "review_channel.py",
+    "find": "    if st[\"mode\"] == \"review\" and st[\"calls\"] and st[\"verdict_validation\"] in (\"INVALID\", \"VALID\"):\n        attempt.advance(\"validated\"",
+    "replace": "    if False:\n        attempt.advance(\"validated\"",
+    "must_fail": [
+      "channel.reemission"
+    ]
+  },
+  {
+    "id": "M62-evidence-invalid-not-recorded",
+    "file": "review_channel.py",
+    "find": "            attempt.advance(\"validated\", verdict_validation=\"INVALID\", extraction=st[\"extraction\"],\n                            call_path_proof=st[\"call_path_proof\"], profile_binding=st[\"profile_binding\"],\n                            effective_profile=RC.build_profile(st[\"selected\"], st[\"calls\"], None))",
+    "replace": "            pass",
+    "must_fail": [
+      "channel.failures-classification"
+    ]
+  },
+  {
+    "id": "M63-failure-receipt-keeps-completed",
+    "file": "review_channel.py",
+    "find": "    if st[\"receipt_phase\"] == \"completed\":\n        # 自查整改（r18 前）：completed 只属终态成功（§6.6）；任何失败收口一律归一为 called，与发布失败 / 秘密终检路径同规则\n        st[\"receipt_phase\"] = \"called\"\n",
+    "replace": "",
+    "must_fail": [
+      "channel.failures-classification"
+    ]
+  },
+  {
+    "id": "M64-synthesis-computes-route-facts",
+    "file": "review_channel_receipt.py",
+    "find": "        r[\"runtime\"] = att.get(\"runtime_group\")\n        # 自查整改（r18 前）：§6.6 补产行闭集之外全部字段恒 null 且补产不计算——路由来源两字段不由 calls[] 归约，保持 null\n",
+    "replace": "        r[\"runtime\"] = att.get(\"runtime_group\")\n        r[\"upstream_route_visibility\"], r[\"route_provenance\"] = route_facts(calls)\n",
+    "must_fail": [
+      "receipt.interrupted-synthesis"
+    ]
+  },
+  {
+    "id": "M65-lone-surrogate-accepted",
+    "file": "review_channel_base.py",
+    "find": "    _reject_lone_surrogates(obj)   # r18 自查整改（R18-B2 线索）：合法 JSON 的孤立代理项转义不可编码为 UTF-8，视同不可解析\n",
+    "replace": "",
+    "must_fail": [
+      "base.strict-json",
+      "channel.unrouteable-startup"
+    ]
+  },
+  {
+    "id": "M66-scrub-json-skips-member-names",
+    "file": "review_channel_base.py",
+    "find": "                            nk = nk.replace(t, red)   # 动态成员名内的秘密同样替换（R19-B1）\n",
+    "replace": "                            nk = nk\n",
+    "must_fail": [
+      "base.secret-scrub",
+      "channel.failures-classification"
+    ]
+  },
+  {
+    "id": "M68-messages-structured-ignored",
+    "file": "adapters/http.py",
+    "find": "        body[\"output_config\"] = {\"format\": {\"type\": \"json_schema\", \"schema\": wrapper_schema()}}\n",
+    "replace": "        pass\n",
+    "must_fail": [
+      "adapter.http.builders-parsers"
+    ]
+  },
+  {
+    "id": "M69-messages-json-object-accepted",
+    "file": "adapters/http.py",
+    "find": "    if ctx[\"provider\"].get(\"transport\") == \"messages\" and so == \"json_object\":\n",
+    "replace": "    if False:\n",
+    "must_fail": [
+      "adapter.http.builders-parsers"
+    ]
+  },
+  {
+    "id": "M70-mutation-any-red-counts-as-caught",
+    "file": "review_channel_selftest.py",
+    "find": "    if green:\n        return \"ESCAPED\", \"must_fail cases stayed green: %s\" % green\n",
+    "replace": "    if len(green) == len(must_fail):\n        return \"ESCAPED\", \"must_fail cases stayed green: %s\" % green\n",
+    "must_fail": [
+      "selftest.mutation-verdict"
+    ]
+  },
+  {
+    "id": "M67-structural-collision-unchecked",
+    "file": "review_channel.py",
+    "find": "        colliding = _structural_collisions(self.secrets.scan_set(), dynamic_names)\n        if colliding:\n",
+    "replace": "        colliding = []\n        if colliding:\n",
+    "must_fail": [
+      "channel.failures-classification"
+    ]
+  },
+  {
+    "id": "M71-collision-ignores-raw-quote",
+    "file": "review_channel.py",
+    "find": "        if ('\"' in text or _generated_bytes_hit(text) or any(text in '\"%s\"' % tok for tok in names)\n",
+    "replace": "        if (False or _generated_bytes_hit(text) or any(text in '\"%s\"' % tok for tok in names)\n",
+    "must_fail": [
+      "channel.failures-classification"
+    ]
+  },
+  {
+    "id": "M72-collision-ignores-generated-bytes",
+    "file": "review_channel.py",
+    "find": "        if ('\"' in text or _generated_bytes_hit(text) or any(text in '\"%s\"' % tok for tok in names)\n",
+    "replace": "        if ('\"' in text or text in _REDACTED_TEXT or any(text in '\"%s\"' % tok for tok in names)\n",
+    "must_fail": [
+      "channel.failures-classification"
+    ]
+  },
+  {
+    "id": "M73-collision-ignores-structural-stream",
+    "file": "review_channel.py",
+    "find": "                or _QUOTE_FREE_STREAM_RE.fullmatch(text)):\n",
+    "replace": "                or False):\n",
+    "must_fail": [
+      "channel.failures-classification"
+    ]
+  },
+  {
+    "id": "M74-registry-structured-output-on-any-runtime",
+    "file": "review_channel_registry.py",
+    "find": "    if \"structured_output\" in prov and not inline:\n",
+    "replace": "    if False:\n",
+    "must_fail": [
+      "registry.schema-constraints"
+    ]
+  },
+  {
+    "id": "M75-registry-max-input-bytes-on-any-runtime",
+    "file": "review_channel_registry.py",
+    "find": "    elif \"max_input_bytes\" in model:\n",
+    "replace": "    elif False:\n",
+    "must_fail": [
+      "registry.schema-constraints"
+    ]
+  },
+  {
+    "id": "M76-registry-equivalents-on-any-kind",
+    "file": "review_channel_registry.py",
+    "find": "        if kind != \"aggregator\":\n",
+    "replace": "        if False:\n",
+    "must_fail": [
+      "registry.schema-constraints"
+    ]
+  },
+  {
+    "id": "M77-collision-ignores-dynamic-member-names",
+    "file": "review_channel.py",
+    "find": "    names = set(STRUCTURAL_TOKENS) | set(extra_names)\n",
+    "replace": "    names = set(STRUCTURAL_TOKENS)\n",
+    "must_fail": [
+      "channel.failures-classification"
+    ]
+  },
+  {
+    "id": "M78-collision-skips-adapter-facts",
+    "file": "review_channel.py",
+    "find": "        self._refuse_structural_collisions(_member_names(self.adapter_facts, set()))   # 适配器事实键（R19-B1）\n",
+    "replace": "",
+    "must_fail": [
+      "channel.failures-classification"
+    ]
+  },
+  {
+    "id": "M79-byte-scrub-single-pass",
+    "file": "review_channel_base.py",
+    "find": "    for _ in range(len(data) + 1):\n",
+    "replace": "    for _ in range(1):\n",
+    "must_fail": [
+      "base.secret-scrub"
+    ]
+  },
+  {
+    "id": "M80-byte-scrub-fixed-cap",
+    "file": "review_channel_base.py",
+    "find": "    for _ in range(len(data) + 1):\n",
+    "replace": "    for _ in range(16):\n",
+    "must_fail": [
+      "base.secret-scrub"
+    ]
+  },
+  {
+    "id": "M81-generated-bytes-ignore-fallback-text",
+    "file": "review_channel.py",
+    "find": "    if text in rep or text in _REDACTED_OUTPUT_TEXT:\n",
+    "replace": "    if text in rep:\n",
+    "must_fail": [
+      "channel.failures-classification"
+    ]
+  },
+  {
+    "id": "M82-generated-bytes-single-sentinel",
+    "file": "review_channel.py",
+    "find": "    rep = _REDACTED_TEXT * (len(text) // len(_REDACTED_TEXT) + 2)\n",
+    "replace": "    rep = _REDACTED_TEXT\n",
+    "must_fail": [
+      "channel.failures-classification"
+    ]
+  },
+  {
+    "id": "M83-domain-one-repo-wide",
+    "file": "review_channel_inputs.py",
+    "find": "        want = C.SPEC_CHAIN_DIR + \"/\" + token\n        return [f for f in files if f == want]\n",
+    "replace": "        return list(by_name.get(token, []))\n",
+    "must_fail": [
+      "inputs.reference-domains"
+    ]
+  },
+  {
+    "id": "M84-zero-hit-relative-to-repo",
+    "file": "review_channel_inputs.py",
+    "find": "            hits = domain_match_set(domain, tok, files, by_name)\n",
+    "replace": "            hits = domain_match_set(domain, tok, files, by_name) or list(by_name.get(tok, []))\n",
+    "must_fail": [
+      "inputs.reference-domains"
+    ]
+  },
+  {
+    "id": "M85-disambiguate-by-references",
+    "file": "review_channel_inputs.py",
+    "find": "                all_hits = by_name.get(tok, [])\n",
+    "replace": "                hits = [h for h in hits if h in delivered] or hits\n                all_hits = by_name.get(tok, [])\n",
+    "must_fail": [
+      "inputs.reference-three-way"
+    ]
+  },
+  {
+    "id": "M86-domain-two-depth-unbounded",
+    "file": "review_channel_inputs.py",
+    "find": "        return [f for f in files if f.startswith(prefix) and f.count(\"/\") == 2 and f.rsplit(\"/\", 1)[-1] == token]\n",
+    "replace": "        return [f for f in files if f.startswith(prefix) and f.rsplit(\"/\", 1)[-1] == token]\n",
+    "must_fail": [
+      "inputs.reference-domains"
+    ]
+  },
+  {
+    "id": "M88-domain-dirs-not-bound-to-closure",
+    "file": "review_channel_inputs.py",
+    "find": "    for d in C.DOMAIN_DIRS:\n        if d not in dirs:\n",
+    "replace": "    for d in ():\n        if d not in dirs:\n",
+    "must_fail": [
+      "inputs.reference-domains"
+    ]
+  },
+  {
+    "id": "M89-decision-form-extracted",
+    "file": "review_channel_inputs.py",
+    "find": "    return bool(name) and \"/\" not in name and \".\" in name.strip(\".\") and not name.startswith(\".\")\n",
+    "replace": "    return bool(name) and \"/\" not in name and not name.startswith(\".\")\n",
+    "must_fail": [
+      "inputs.decision-form-excluded"
+    ]
+  },
+  {
+    "id": "M90-planned-location-auto-pass",
+    "file": "review_channel_inputs.py",
+    "find": "    if limit is None or limit.get(\"kind\") != \"planned-location\":\n        return False, \"no planned-location declaration\"\n",
+    "replace": "    if limit is not None and limit.get(\"kind\") != \"planned-location\":\n        return False, \"no planned-location declaration\"\n",
+    "must_fail": [
+      "inputs.planned-location"
+    ]
+  },
+  {
+    "id": "M91-planned-location-any-reason",
+    "file": "review_channel_inputs.py",
+    "find": "    if limit is None or limit.get(\"kind\") != \"planned-location\":\n        return False, \"no planned-location declaration\"\n",
+    "replace": "    if limit is None:\n        return False, \"no planned-location declaration\"\n",
+    "must_fail": [
+      "inputs.planned-location"
+    ]
+  },
+  {
+    "id": "M92-planned-location-top-level-exists-allowed",
+    "file": "review_channel_inputs.py",
+    "find": "    if top_exists:\n        return False, \"top-level member %r already exists; a missing path beneath it is an ordinary missing reference\" % first\n",
+    "replace": "",
+    "must_fail": [
+      "inputs.planned-location"
+    ]
+  },
+  {
+    "id": "M93-planned-deliverable-first-segment",
+    "file": "review_channel_inputs.py",
+    "find": "                if unit_dir and tok.startswith(unit_dir + \"/\"):\n",
+    "replace": "                if unit_dir and tok.split(\"/\", 1)[0] == unit_dir.split(\"/\", 1)[0]:\n",
+    "must_fail": [
+      "inputs.planned-deliverable-boundary"
+    ]
+  },
+  {
+    "id": "M94-dedup-scope-group-local",
+    "file": "review_channel_inputs.py",
+    "find": "    occupied = set(fixed_names)\n",
+    "replace": "    occupied = set()\n",
+    "must_fail": [
+      "inputs.bundle-names"
+    ]
+  },
+  {
+    "id": "M95-duplicate-source-not-prededuped",
+    "file": "review_channel_inputs.py",
+    "find": "        if s in seen:\n            raise base.PreflightError(\"duplicate-reference-source\", \"source path %r listed more than once\" % s)\n",
+    "replace": "        pass\n",
+    "must_fail": [
+      "inputs.bundle-names"
+    ]
+  },
+  {
+    "id": "M96-reserved-prefix-ban-on-rename-result",
+    "file": "review_channel_inputs.py",
+    "find": "        while name in occupied or (not generated and name.startswith(C.RESERVED_BUNDLE_PREFIXES)):\n",
+    "replace": "        while name in occupied or name.startswith(C.RESERVED_BUNDLE_PREFIXES):\n",
+    "must_fail": [
+      "inputs.bundle-names"
+    ]
+  },
+  {
+    "id": "M97-reserved-prefix-only-on-extension",
+    "file": "review_channel_inputs.py",
+    "find": "        while name in occupied or (not generated and name.startswith(C.RESERVED_BUNDLE_PREFIXES)):\n",
+    "replace": "        while name in occupied:\n",
+    "must_fail": [
+      "inputs.bundle-names"
+    ]
+  },
+  {
+    "id": "M98-evidence-limit-kind-not-closed",
+    "file": "review_channel_request.py",
+    "find": "        if \"kind\" in lim and lim[\"kind\"] not in C.EVIDENCE_LIMIT_KINDS:\n",
+    "replace": "        if False:\n",
+    "must_fail": [
+      "request.total-closure"
+    ]
+  },
+  {
+    "id": "M99-evidence-limit-reference-not-unique",
+    "file": "review_channel_request.py",
+    "find": "        if lim[\"reference\"] in seen_refs:\n",
+    "replace": "        if False:\n",
+    "must_fail": [
+      "request.total-closure"
+    ]
+  },
+  {
+    "id": "M100-r1-previous-round-allowed",
+    "file": "review_channel_request.py",
+    "find": "        raise base.PreflightError(\"request-field-not-allowed\", \"previous_round is forbidden in r1\")\n",
+    "replace": "        pass\n",
+    "must_fail": [
+      "request.total-closure"
+    ]
+  },
+  {
+    "id": "M101-field-line-back-to-title-sentence",
+    "file": "review_channel_instruction.py",
+    "find": "    lines.append(_field(\"verdict_schema\", \"固定 \\\"%s\\\"。\" % C.VERDICT_SCHEMA))\n",
+    "replace": "    lines[-1] = lines[-1] + \"（verdict_schema 固定 \\\"%s\\\"）\" % C.VERDICT_SCHEMA\n",
+    "must_fail": [
+      "instruction.field-lines"
+    ]
+  },
+  {
+    "id": "M102-nested-member-dropped-from-field-line",
+    "file": "review_channel_instruction.py",
+    "find": "    lines.append(_field(\"candidate\", \"%s，首候选（任务书第 2 节首行）的身份，须与投递材料表相等；恒等于 candidates[0]。\" % member_sequence(tree[\"candidate\"])))\n",
+    "replace": "    lines.append(_field(\"candidate\", \"%s，首候选（任务书第 2 节首行）的身份，须与投递材料表相等；恒等于 candidates[0]。\" % \"{bundle_name}\"))\n",
+    "must_fail": [
+      "instruction.field-lines"
+    ]
+  },
+  {
+    "id": "M103-member-sequence-depth-one",
+    "file": "review_channel_instruction.py",
+    "find": "        parts.append(name + (member_sequence(sub) if sub else \"\"))\n",
+    "replace": "        parts.append(name)\n",
+    "must_fail": [
+      "instruction.field-lines"
+    ]
+  },
+  {
+    "id": "M104-field-line-checker-depth-one",
+    "file": "review_channel_instruction.py",
+    "find": "        for k, sub in want.items():\n            if sub:\n                compare(path + \".\" + k, sub, got.get(k) if got.get(k) is not None else None)\n",
+    "replace": "        return\n",
+    "must_fail": [
+      "instruction.field-lines"
+    ]
+  },
+  {
+    "id": "M105-combined-fields-merged",
+    "file": "review_channel_instruction.py",
+    "find": "    lines.append(_field(\"subject\", \"与任务书状态头逐字相等。\"))\n    lines.append(_field(\"stage\", \"与任务书状态头逐字相等。\"))\n    lines.append(_field(\"round\", \"与任务书状态头逐字相等（round = \\\"%s\\\"）。\" % round_tag))\n",
+    "replace": "    lines.append(\"- subject / stage / round: 与任务书状态头逐字相等（round = \\\"%s\\\"）。\" % round_tag)\n",
+    "must_fail": [
+      "instruction.field-lines"
+    ]
+  },
+  {
+    "id": "M115-validation-reemit-extended-to-judgment-defects",
+    "file": "review_channel_verdict.py",
+    "find": "    return bool(classified) and all(c in (\"known\", \"narrative\") for c, _m in classified)",
+    "replace": "    return bool(classified) and all(c in (\"known\", \"narrative\", \"other\") for c, _m in classified)",
+    "must_fail": [
+      "verdict.classification",
+      "channel.validation-reemit"
+    ]
+  },
+  {
+    "id": "M116-judgment-equality-only-finding-ids",
+    "file": "review_channel_verdict.py",
+    "find": "    for f in C.JUDGMENT_FIELDS:\n        if base.canonical_json(o.get(f)) != base.canonical_json(r.get(f)):",
+    "replace": "    for f in (\"findings\",):\n        if sorted(x.get(\"id\") for x in (o.get(f) or []) if isinstance(x, dict)) != sorted(x.get(\"id\") for x in (r.get(f) or []) if isinstance(x, dict)):",
+    "must_fail": [
+      "verdict.classification",
+      "channel.validation-reemit"
+    ]
+  },
+  {
+    "id": "M117-second-reemit-allowed-after-envelope",
+    "file": "review_channel.py",
+    "find": "            extraction[\"reemit_trigger\"] = \"envelope\"\n",
+    "replace": "            extraction[\"reemit_trigger\"] = None\n",
+    "must_fail": [
+      "channel.validation-reemit"
+    ]
+  },
+  {
+    "id": "M118-skeleton-lines-dropped-from-injection",
+    "file": "review_channel_instruction.py",
+    "find": "    lines.extend(narrative_skeleton_lines(required_question_ids, round_tag, previous_finding_ids))\n",
+    "replace": "    lines.extend(narrative_skeleton_lines(required_question_ids, round_tag, previous_finding_ids)[3:])\n",
+    "must_fail": [
+      "instruction.skeleton-lines"
+    ]
+  },
+  {
+    "id": "M119-skeleton-questions-not-per-id",
+    "file": "review_channel_contract.py",
+    "find": "    for qid, assessment in v[\"questions\"]:",
+    "replace": "    for qid, assessment in v[\"questions\"][:1]:",
+    "must_fail": [
+      "instruction.skeleton-lines"
+    ]
+  },
+  {
+    "id": "M120-candidates-subset-accepted",
+    "file": "review_channel_verdict.py",
+    "find": "        if got != want or len(got) != len(cl):",
+    "replace": "        if not set(got) <= set(want):",
+    "must_fail": [
+      "verdict.classification"
+    ]
+  },
+  {
+    "id": "M125-multi-candidate-baseline-first-only",
+    "file": "review_channel_inputs.py",
+    "find": "    for cand in cands:\n        baseline = previous.get('sealed_inputs',{}).get(cand['sha256'])",
+    "replace": "    for cand in cands[:1]:\n        baseline = previous.get('sealed_inputs',{}).get(cand['sha256'])",
+    "must_fail": [
+      "channel.multi-candidate"
+    ]
+  },
+  {
+    "id": "M126-scope-files-read-undeclared-path-accepted",
+    "file": "review_channel_verdict.py",
+    "find": "        outside = [s for s in scope if s not in allowed_files]\n",
+    "replace": "        outside = []\n",
+    "must_fail": [
+      "verdict.classification",
+      "verdict.derived-bundle-names"
+    ]
+  },
+  {
+    "id": "M128-candidates-order-only-first-checked",
+    "file": "review_channel_verdict.py",
+    "find": "        got = [(c[\"bundle_name\"], c[\"sha256\"]) for c in cl if isinstance(c[\"bundle_name\"], str) and isinstance(c[\"sha256\"], str)]\n        want = [(c[\"bundle_name\"], c[\"sha256\"]) for c in cands_ctx]",
+    "replace": "        got = sorted((c[\"bundle_name\"], c[\"sha256\"]) for c in cl if isinstance(c[\"bundle_name\"], str) and isinstance(c[\"sha256\"], str))\n        want = sorted((c[\"bundle_name\"], c[\"sha256\"]) for c in cands_ctx)",
+    "must_fail": [
+      "verdict.classification"
+    ]
+  },
+  {
+    "id": "M133-task-axis-multi-candidate-allowed",
+    "file": "review_channel_request.py",
+    "find": "    if task_record is not None and len(cands) != 1:",
+    "replace": "    if False:",
+    "must_fail": [
+      "request.total-closure"
+    ]
+  },
+  {
+    "id": "M161-current-revision-first-row-used",
+    "file": "review_channel_inputs.py",
+    "find": "        if row.get(\"event\") in (\"freeze\", \"re-freeze\"):\n            current = row\n            retired = set()\n",
+    "replace": "        if row.get(\"event\") in (\"freeze\", \"re-freeze\") and current is None:\n            current = row\n            retired = set()\n",
+    "must_fail": [
+      "inputs.current-revision-annotation"
+    ]
+  },
+  {
+    "id": "M162-current-revision-retire-row-treated-as-current",
+    "file": "review_channel_inputs.py",
+    "find": "        elif row.get(\"event\") == \"retire\":\n            retired.update(_object_paths(row))\n",
+    "replace": "        elif row.get(\"event\") == \"retire\":\n            current = row\n",
+    "must_fail": [
+      "inputs.current-revision-annotation"
+    ]
+  },
+  {
+    "id": "M163-current-revision-md-fallback-despite-jsonl",
+    "file": "review_channel_inputs.py",
+    "find": "        if os.path.isfile(os.path.join(gov, subject, FREEZE_RECORDS_NAME)):\n            continue\n",
+    "replace": "        if False:\n            continue\n",
+    "must_fail": [
+      "inputs.current-revision-annotation"
+    ]
+  },
+  {
+    "id": "M164-current-revision-md-fallback-lexicographic",
+    "file": "review_channel_inputs.py",
+    "find": "    return max(revisions) if revisions else None\n",
+    "replace": "    return max(revisions, key=str) if revisions else None\n",
+    "must_fail": [
+      "inputs.current-revision-annotation"
+    ]
+  },
+  {
+    "id": "M165-current-revision-annotation-turned-into-rejection",
+    "file": "review_channel_inputs.py",
+    "find": "                            entry[\"current_revision\"] = annotate_revision(hits[0])\n",
+    "replace": "                            entry[\"current_revision\"] = annotate_revision(hits[0])\n                            if entry[\"current_revision\"] is not None and ref[\"revision\"] > entry[\"current_revision\"]:\n                                raise base.PreflightError(\"reference-unresolved\", \"revision ahead of the current one\")\n",
+    "must_fail": [
+      "inputs.current-revision-annotation"
+    ]
+  },
+  {
+    "id": "M167-rule-14-removed",
+    "file": "review_channel_verdict.py",
+    "find": "        elif f[\"origin\"] in C.NON_BLOCKING_ORIGINS and sev == \"blocking\":",
+    "replace": "        elif False:",
+    "must_fail": [
+      "verdict.fourteen-rules",
+      "channel.unchanged-region"
+    ]
+  },
+  {
+    "id": "M168-question-set-not-per-stage",
+    "file": "review_channel_contract.py",
+    "find": "    return [q[0] for q in QUESTIONS_BY_STAGE[stage]]",
+    "replace": "    return [q[0] for q in IMPL_QUESTIONS]",
+    "must_fail": [
+      "contract.closed-sets",
+      "channel.five-questions"
+    ]
+  },
+  {
+    "id": "M169-question-multiset-unchecked",
+    "file": "review_channel_verdict.py",
+    "find": "    if sorted(answered) != sorted(required):\n        # 规则 2（Amendment 4）",
+    "replace": "    if False:\n        # 规则 2（Amendment 4）",
+    "must_fail": [
+      "verdict.fourteen-rules",
+      "channel.five-questions"
+    ]
+  },
+  {
+    "id": "M170-round-cap-default-raised",
+    "file": "fixtures/registry_sample.json",
+    "find": "\"max_rounds\": 2",
+    "replace": "\"max_rounds\": 9",
+    "must_fail": [
+      "channel.two-round-cap"
+    ]
+  },
+  {
+    "id": "M171-decisions-missing-tolerated",
+    "file": "review_channel.py",
+    "find": "        if doc is None:\n            raise base.PreflightError(\"decisions-missing\"",
+    "replace": "        if doc is None and False:\n            raise base.PreflightError(\"decisions-missing\"",
+    "must_fail": [
+      "channel.respond-decisions"
+    ]
+  },
+  {
+    "id": "M172-dispositions-prefix-unchecked",
+    "file": "review_channel_decisions.py",
+    "find": "    if not rem.startswith(segment):",
+    "replace": "    if False:",
+    "must_fail": [
+      "decisions.derivation",
+      "channel.respond-decisions"
+    ]
+  },
+  {
+    "id": "M173-blocking-skip-without-work-item-accepted",
+    "file": "review_channel_decisions.py",
+    "find": "        if action == \"skip\" and sev.get(fid) == \"blocking\" and \"work_item\" not in d:",
+    "replace": "        if False:",
+    "must_fail": [
+      "decisions.rules",
+      "channel.respond-decisions"
+    ]
+  },
+  {
+    "id": "M174-decision-finding-set-unchecked",
+    "file": "review_channel_decisions.py",
+    "find": "    if sorted(set(got)) != sorted(want):",
+    "replace": "    if False:",
+    "must_fail": [
+      "decisions.rules",
+      "channel.respond-decisions"
+    ]
+  },
+  {
+    "id": "M175-derived-residuals-unchecked",
+    "file": "review_channel_decisions.py",
+    "find": "    if got[:len(derived)] != derived:",
+    "replace": "    if False:",
+    "must_fail": [
+      "decisions.derivation",
+      "channel.respond-decisions"
+    ]
+  },
+  {
+    "id": "M176-verdict-binding-unchecked-at-preflight",
+    "file": "review_channel.py",
+    "find": "        if doc[\"verdict_sha256\"] != base.sha256_bytes(self.previous[\"verdict_bytes\"]):",
+    "replace": "        if False:",
+    "must_fail": [
+      "channel.respond-decisions"
+    ]
+  },
+  {
+    "id": "M177-respond-writes-without-validation",
+    "file": "review_channel.py",
+    "find": "    problems = D.decision_problems(obj[\"decisions\"], findings)\n    if problems:\n        return _respond_reject(problems)",
+    "replace": "    problems = []",
+    "must_fail": [
+      "channel.respond-decisions"
+    ]
+  },
+  {
+    "id": "M178-decisions-sha-not-recorded",
+    "file": "review_channel.py",
+    "find": "        st[\"decisions_sha256\"] = pf.decisions_sha256",
+    "replace": "        st[\"decisions_sha256\"] = None",
+    "must_fail": [
+      "channel.respond-decisions",
+      "channel.review-paths"
+    ]
+  },
+  {
+    "id": "M179-r1-changed-region-skipped",
+    "file": "review_channel.py",
+    "find": "            self.changed_region = self._r1_changed_region(root, candidates)",
+    "replace": "            self.changed_region = [{\"bundle_name\": c[\"bundle_name\"], \"baseline\": None, \"diff\": None, \"note\": None} for c in candidates]",
+    "must_fail": [
+      "channel.r1-changed-region"
+    ]
+  },
+  {
+    "id": "M180-md-record-identity-ignored",
+    "file": "review_channel_inputs.py",
+    "find": "            return {\"revision\": rev, \"sha256\": _object_sha256(objects, target_rel) if objects is not None else None,",
+    "replace": "            return {\"revision\": rev, \"sha256\": None,",
+    "must_fail": [
+      "inputs.current-revision-annotation",
+      "channel.r1-changed-region"
+    ]
+  },
+  {
+    "id": "M181-standard-questions-accepted-again",
+    "file": "review_channel_request.py",
+    "find": "    \"invocation_authorization\",\n)",
+    "replace": "    \"invocation_authorization\", \"standard_questions\",\n)",
+    "must_fail": [
+      "request.total-closure"
+    ]
+  },
+  {
+    "id": "M182-respond-rejection-ignores-verdict-location",
+    "file": "review_channel.py",
+    "find": "    if archived is None and (not os.path.isfile(os.path.join(repo_root, verdict_rel)) or not os.path.isfile(os.path.join(repo_root, receipt_rel))):",
+    "replace": "    if False:",
+    "must_fail": [
+      "channel.respond-decisions"
+    ]
+  },
+  {
+    "id": "M183-legacy-v2-closed-set-reintroduced",
+    "file": "review_channel_execution.py",
+    "find": "    if any(k not in r for k in C.RECEIPT_REF_FIELDS) or any(k in r for k in newer):return ['Receipt fields']\n",
+    "replace": "    if set(r)!=set(C.LEGACY_RECEIPT_KEYS):return ['Receipt fields']\n",
+    "must_fail": [
+      "registry.legacy-receipt-read-semantics",
+      "receipt.legacy-shape-semantics"
+    ]
+  },
+  {
+    "id": "M184-legacy-v2-accepts-newer-members",
+    "file": "review_channel_execution.py",
+    "find": "    if any(k not in r for k in C.RECEIPT_REF_FIELDS) or any(k in r for k in newer):return ['Receipt fields']\n",
+    "replace": "    if any(k not in r for k in C.RECEIPT_REF_FIELDS):return ['Receipt fields']\n",
+    "must_fail": [
+      "registry.legacy-receipt-read-semantics",
+      "receipt.legacy-shape-semantics"
+    ]
+  }
+]
