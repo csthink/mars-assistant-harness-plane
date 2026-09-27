@@ -1,0 +1,42 @@
+# 公开仓安全性检查的白名单（tools/check-public-safety-generic.sh 默认读取本文件）。
+#
+# 格式：每行一个扩展正则（bash [[ =~ ]] 语义），对「<相对路径>:<行内容>」整体匹配，命中即放行；
+# 以 # 开头的行与空行忽略；路径门不受白名单影响。
+#
+# 登记原则：
+#   · 只登记测试与 selftest 里的合成值和模式误报；真实凭据一律不登记，应当吊销并从历史中清除。
+#   · 每条规则写全路径与整行内容，从 ^ 锚到 $，只放行这一处；该行一旦改动，规则失效，需要重新复核。
+#   · 规则里凭据名后面的分隔符写成 [:] 或 [=]、私钥头写成 BEGIN [P]RIVATE KEY，避免本文件自身被扫描器命中。
+#   · 每条规则上方写明理由；新增或删除规则时，核对扫描输出里「白名单放行 N 处」的数量。
+
+# ── 凭据形态：测试与 selftest 里的合成值
+
+# apps/harness/tests/test_execution_port.py：执行请求标识以 secret: 为前缀拼出的合成值，用于验证结果扫描器拦截回显的秘密字节；不是凭据
+^apps/harness/tests/test_execution_port\.py:            self\.intent\['executionRequestId'\][=]'secret[:]'\+location$
+# apps/harness/tests/test_runtime.py：伪造的分页 token，用于验证 Runtime 拒绝伪造分页并要求重新同步；不是凭据
+^apps/harness/tests/test_runtime\.py:        self\.h\.call\("runtime\.snapshot\.next",dict\(scopeRef=scope,snapshotId=first\["snapshotId"\],pageToken[=]"page:forged"\),error="RESYNC_REQUIRED"\)$
+# mechanisms/handoff-protocol/handoff_cl56_selftest.py：平台配置里夹带的合成 token 字段，用于验证配置装载拒绝内嵌凭据
+^mechanisms/handoff-protocol/handoff_cl56_selftest\.py:                p\.write_text\(json\.dumps\(dict\(self\.c, token[=]'test-secret'\)\)\)$
+# mechanisms/handoff-protocol/handoff_workflow_selftest.py：合成的平台环境变量值（主机为 .invalid 保留域），用于验证错误信息对配置值脱敏
+^mechanisms/handoff-protocol/handoff_workflow_selftest\.py:        with patch\.dict\(os\.environ, \{'GL_HOST': 'https://private\.invalid', 'GL_CSTHINK_HARNESS_PLANE_PROJECT': 'secret/project', 'GL_CSTHINK_HARNESS_PLANE_TOKEN'[:] 'token/value'\}\):$
+# mechanisms/review-channel/adapters/codex_selftest.py：写进 selftest 临时目录的合成登录态认证文件内容，用于验证适配器读取认证文件；不是真实 token
+^mechanisms/review-channel/adapters/codex_selftest\.py:            f\.write\('\{"tokens": \{"access_token"[:] "AT-secret-1"\}\}'\)$
+
+# ── 凭据形态：模式误报（字段名为 token，值是文件名）
+
+# mechanisms/review-channel/review_channel_selftest_taskbook.py：评审任务书引用清单的 token 字段，值为引用文件名 milestones.md
+^mechanisms/review-channel/review_channel_selftest_taskbook\.py:                         \{"token"[:] "milestones\.md", "status": "delivered", "domain": "one", "path": "sdd/milestones\.md",$
+# mechanisms/review-channel/review_channel_selftest_taskbook.py：同一清单的下一项，值为引用文件名 proposal.md
+^mechanisms/review-channel/review_channel_selftest_taskbook\.py:                         \{"token"[:] "proposal\.md", "status": "delivered", "domain": "one", "path": "sdd/proposal\.md",$
+
+# ── 私钥头：测试在运行时拼出的探针
+
+# apps/harness/tests/test_bundle.py：把合成探针字节在运行时拼成 PEM 私钥块，用于验证 bundle 成员的私钥扫描能够命中；文件内没有密钥材料
+^apps/harness/tests/test_bundle\.py:        pem = b"-----BEGIN [P]RIVATE KEY-----\\n" \+ __import__\("base64"\)\.b64encode\(probe\) \+ b"\\n-----END PRIVATE KEY-----\\n"$
+
+# ── 邮箱形态：合成 Git 地址里的 userinfo 与邮箱写法相同，按邮箱规则检查时会被当作个人邮箱
+
+# apps/harness/tests/test_publish.py：带 userinfo 的合成远端地址，用于验证发布目标拒绝内嵌凭据的地址
+^apps/harness/tests/test_publish\.py:                 \("publishTarget\.remoteAddress", dict\(remoteAddress="https://user:secret@github\.com/o/r\.git"\)\),$
+# mechanisms/handoff-protocol/handoff_cl57_selftest.py：合成的 SSH 地址（owner/project 为占位名），用于验证迁移工具拒绝与声明不一致的 Git 地址
+^mechanisms/handoff-protocol/handoff_cl57_selftest\.py:                        'git@github\.com:owner/other\.git','ssh://root@github\.com/owner/project\.git',$

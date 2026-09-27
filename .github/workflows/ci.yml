@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  verify:
+    # 这个 name 是 main 分支 ruleset 的必需状态检查名，改名须同时改 ruleset。
+    name: verify
+    # apps/harness/requirements.lock 只登记了 CPython 3.12 macOS arm64 的 rpds-py wheel 散列，
+    # Runtime 开发 bundle 的固定解释器资产也是 aarch64-apple-darwin，所以用 macOS arm64 runner。
+    runs-on: macos-15
+    timeout-minutes: 150
+    env:
+      PY: apps/harness/.venv/bin/python
+      # 不设置 HARNESS_INSTANCE_ROOT 与 HARNESS_INSTANCE_RECORDS：依赖产品线仓实例区的用例以明确原因 skip。
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # 与 pre-commit hook 是同一个文件。先跑阳性对照，扫描器失效时不会给出假的通过。
+      - name: Public safety scanner selftest
+        run: bash tools/check-public-safety-generic.sh --selftest
+
+      - name: Scan tracked content
+        run: bash tools/check-public-safety-generic.sh .
+
+      - name: Set up CPython 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install locked dependencies
+        run: |
+          python -m venv apps/harness/.venv
+          "$PY" -m pip install --disable-pip-version-check --require-hashes -r apps/harness/requirements.lock
+
+      # test_bundle 需要显式给出构建输入与 OpenSSL 3；构建器本身从不下载，这里按固定摘要下载并核对。
+      - name: Prepare Runtime development bundle inputs
+        run: |
+          inputs="$RUNNER_TEMP/bundle-inputs"
+          mkdir -p "$inputs"
+          "$PY" -B - "$inputs" <<'PYCODE'
+          import hashlib
+          import json
+          import sys
+          import urllib.request
+          from pathlib import Path
+
+          inputs = Path(sys.argv[1])
+          interpreter = json.loads(Path("apps/harness/bundle/inputs.lock.json").read_text())["interpreter"]
+          target = inputs / "python-build-standalone" / interpreter["releaseTag"] / interpreter["asset"]
+          target.parent.mkdir(parents=True, exist_ok=True)
+          with urllib.request.urlopen(interpreter["url"]) as response:
+              data = response.read()
+          if len(data) != interpreter["bytes"] or hashlib.sha256(data).hexdigest() != interpreter["sha256"]:
+              raise SystemExit("interpreter asset does not match apps/harness/bundle/inputs.lock.json")
+          target.write_bytes(data)
+          PYCODE
+          "$PY" -m pip download --disable-pip-version-check --require-hashes --no-deps --only-binary=:all: \
+            -r apps/harness/requirements.lock -d "$inputs/wheels"
+          openssl_program="$(brew --prefix openssl@3)/bin/openssl"
+          "$openssl_program" version | grep -q '^OpenSSL 3\.'
+          echo "HP_BUNDLE_INPUTS_DIR=$inputs" >> "$GITHUB_ENV"
+          echo "HP_BUNDLE_OPENSSL=$openssl_program" >> "$GITHUB_ENV"
+
+      - name: Product tests
+        run: |
+          "$PY" -B -m unittest discover -s apps/harness/tests -p 'test_*.py' -v
+
+      # 再完整运行一次同一套件，并逐帧核对 Runtime 发出的协议帧。报告只留在 runner 临时目录，不上传。
+      - name: Runtime Contract conformance report
+        run: |
+          "$PY" -B apps/harness/tests/run_contract_conformance.py --output "$RUNNER_TEMP/conformance"
+
+      - name: Mechanism selftests
+        run: |
+          failed=()
+          run() {
+            local name="$1"
+            shift
+            echo "::group::$name"
+            if "$@"; then
+              echo "::endgroup::"
+            else
+              echo "::endgroup::"
+              failed+=("$name")
+            fi
+          }
+          run artifact-templates "$PY" -B mechanisms/artifact-templates/artifact_lint_selftest.py
+          run delivery-method "$PY" -B mechanisms/delivery-method/run_delivery_method_reminder_selftest.py
+          run gates "$PY" -B mechanisms/gates/gates.py selftest
+          run handoff-protocol "$PY" -B mechanisms/handoff-protocol/handoff_selftest.py
+          run handoff-protocol-cl56 "$PY" -B mechanisms/handoff-protocol/handoff_cl56_selftest.py
+          run handoff-protocol-cl57 "$PY" -B mechanisms/handoff-protocol/handoff_cl57_selftest.py
+          run handoff-protocol-workflow "$PY" -B mechanisms/handoff-protocol/handoff_workflow_selftest.py
+          run repo-layout "$PY" -B mechanisms/repo-layout/history_read_selftest.py
+          # 评审通道只接受净化启动：-B -E -s -S 与已存在的 pycache_prefix 目录。
+          run review-channel "$PY" -B -E -s -S -X pycache_prefix="$(mktemp -d)" mechanisms/review-channel/review_channel.py selftest
+          if [ "${#failed[@]}" -gt 0 ]; then
+            echo "::error::selftest failed: ${failed[*]}"
+            exit 1
+          fi
