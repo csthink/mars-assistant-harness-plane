@@ -217,6 +217,7 @@ class ProductBoundaryCases(unittest.IsolatedAsyncioTestCase):
     async def test_product_archive_inheritance_and_maintenance_cross_reject(self):
         self.configure_archive();self.env.control(behavior='valid',verdict='FAIL');code,first=await self.run_review();self.assertEqual(code,0)
         source=first.reports[-1]['source']
+        first_receipt=self.receipts()[-1]
         decision=dict(schema='review-channel-decisions-input/v2',subject='demo',task_record='gov-t1',stage='impl',round='r1',decisions=[dict(finding_id='R1-B1',action='fix',instructions='Synthetic correction',owner_verbatim='Fix synthetic finding')],source=source,supersedes=None)
         path=Path(self.engine.tmp_root)/'response.json';path.write_text(json.dumps(decision))
         code,out,err,response=self.env.run('respond',str(path));self.assertEqual(code,0,(out,err))
@@ -225,8 +226,13 @@ class ProductBoundaryCases(unittest.IsolatedAsyncioTestCase):
         # Maintenance cannot inherit the product port's previous applicability.
         code,out,err,report=self.env.run('preflight',request)
         self.assertEqual(code,1);self.assertEqual(report['failure_code'],'inherit-unmaterializable')
+        upgraded=dict(launcher='/synthetic/codex-upgraded',binaryDigest='a'*64,version='0.159.2')
+        self.host.program_identity=upgraded
         second=self.fresh_bridge();self.assertEqual(await second.review('review',opts),0,(second.reports,second.diagnostics))
         d,files=self.archive.read(second.reports[-1]['source']);receipt=json.loads(E.role_file(d,files,'receipt')[1]);self.assertEqual(receipt['execution']['capability_suggestion'],'REVIEW_ENABLED')
+        self.assertEqual(receipt['execution']['program_identity'],upgraded)
+        self.assertEqual(receipt['effective_profile']['execution_applicability']['program_identity'],upgraded)
+        self.assertEqual(receipt['execution']['profile']['digest'],first_receipt['execution']['profile']['digest'])
 
     async def test_definition_rejection_is_before_provider_and_host(self):
         target='tasks/gov-t1/gov-t1.md';self.repo.write(target,'# malformed task\n');self.repo.commit('malformed synthetic candidate')
