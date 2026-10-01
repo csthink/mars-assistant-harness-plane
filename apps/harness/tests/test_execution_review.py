@@ -13,7 +13,7 @@ import unittest
 from unittest.mock import patch
 import test_execution_port as EP
 import uuid
-from execution.bridge import ProductReview, MECHANISM
+from execution.bridge import ProductReview, MECHANISM, same_applicability_policy
 from execution.local import LocalExecutionPort
 from execution.host import HostExecutionPort
 from execution.port import ExecutionAuthorization, ExecutionDiscovery, ExecutionError, identity, sha
@@ -54,7 +54,7 @@ class ReviewCases(unittest.IsolatedAsyncioTestCase):
             adapter=RT.load_adapter('fake',self.env.adapters)
             result=adapter.run(ctx);answer=result['final_message'].decode()
             start=self.host.start
-            return json.dumps(dict(**{k:start[k] for k in ('operationId','profileId','profileDigest')},executionRef='execution:one',actualBinding=self.host.actual(),outcome='completed',evidence=dict(answer=answer,answerBytes=len(answer.encode()),answerDigest=sha(answer.encode()),readback=dict(modelProvider='protocol-independent')))).encode()
+            return json.dumps(dict(**{k:start[k] for k in ('operationId','profileId','profileDigest')},executionRef='execution:one',actualBinding=self.host.actual(),outcome='completed',evidence=dict(answer=answer,answerBytes=len(answer.encode()),answerDigest=sha(answer.encode()),readback=dict(modelProvider='protocol-independent'),programIdentity=copy.deepcopy(self.host.program_identity)))).encode()
         self.host.result_bytes=result_bytes
         async def discover():return ExecutionDiscovery(copy.deepcopy(self.registration['profile']),self.intent['connectionRef'],self.registration['provider'],'protocol-independent','7')
         async def authorize(intent):return ExecutionAuthorization(identity(intent),sha(intent['invocation_authorization'].encode()),intent['caller'],('Anthropic',),('author:fixed',),True,2,'owner:synthetic')
@@ -97,6 +97,37 @@ class ReviewCases(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(r['execution']['capability_suggestion'],'REVIEW_ENABLED')
         self.assertIsNone(r['evidence_storage']);self.assertEqual(r['receipt_schema'],'review-channel-receipt/v4')
         rec=self.port.current(bridge.reservations[1]);self.assertEqual(sha(base64.b64decode(rec['result_envelope'])),rec['observations'][-1]['physical_execution']['resultRef']['digest'])
+    async def test_reviewer_upgrade_uses_host_identity_not_static_registry(self):
+        previous=ReviewCases('test_probe_suggests_call_only');previous.setUp()
+        try:
+            prior_code,prior_bridge=await previous.run_review()
+            self.assertEqual(prior_code,0,(prior_bridge.reports,prior_bridge.diagnostics))
+            prior=previous.receipts()[-1]
+        finally:previous.tearDown()
+        registered=copy.deepcopy(self.registration['profile']['programIdentity'])
+        actual=dict(launcher='/synthetic/codex-current',binaryDigest='f'*64,version='0.159.2')
+        self.host.program_identity=actual
+        code,bridge=await self.run_review();self.assertEqual(code,0,(bridge.reports,bridge.diagnostics))
+        receipt=self.receipts()[-1];self.assertEqual(RC.receipt_shape_problems(receipt),[])
+        self.assertEqual(receipt['runtime']['tool_version'],actual['version'])
+        self.assertEqual(receipt['execution']['program_identity'],actual)
+        self.assertEqual(receipt['execution']['profile']['programIdentity'],actual)
+        self.assertEqual(receipt['effective_profile']['execution_applicability']['program_identity'],actual)
+        self.assertEqual(receipt['execution']['profile']['digest'],self.registration['profile']['digest'])
+        self.assertEqual(self.registration['profile']['programIdentity'],registered)
+        self.assertNotEqual(actual,registered)
+        self.assertEqual(prior['execution']['profile']['digest'],receipt['execution']['profile']['digest'])
+        old_scope=prior['effective_profile']['execution_applicability']
+        new_scope=receipt['effective_profile']['execution_applicability']
+        self.assertTrue(same_applicability_policy(old_scope,new_scope))
+        self.assertFalse(same_applicability_policy(old_scope,dict(new_scope,profile_digest='0'*64)))
+    async def test_identity_change_after_first_call_stops_same_port(self):
+        code,bridge=await self.run_review('probe');self.assertEqual(code,0,(bridge.reports,bridge.diagnostics))
+        starts=self.host.methods.count('host.execution.start')
+        self.host.program_identity=dict(self.host.program_identity,version='next-version')
+        with self.assertRaises(ExecutionError) as error:await self.port.preflight(bridge.intent)
+        self.assertEqual(error.exception.code,'execution-port-identity-unverified')
+        self.assertEqual(self.host.methods.count('host.execution.start'),starts)
     async def test_archive_formal_runner_v5_and_dual_publication(self):
         self.configure_archive();code,bridge=await self.run_review();self.assertEqual(code,0,(bridge.reports,bridge.diagnostics))
         r=self.receipts()[-1];self.assertEqual(RC.receipt_shape_problems(r),[])

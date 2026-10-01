@@ -8,7 +8,9 @@ import base64
 import copy
 from datetime import datetime, timezone
 import json
-from runtime.protocol import Schemas, Fault, digest, evidence_key
+import posixpath
+import re
+from runtime.protocol import Schemas, Fault, canonical, digest, evidence_key
 from domain.port import DomainUnavailable
 from .port import ExecutionAuthorization, ExecutionDiscovery, ExecutionError, require, sha, identity
 from .materials import sealed_materials, export_resources
@@ -21,6 +23,31 @@ ROLE_INTENT = {"review": "review", "coding-implementer": "implement"}
 def without_program(profile):
     """Profile fields a registration binds; programIdentity is rediscovered per execution (OD-399)."""
     return {k: v for k, v in profile.items() if k != "programIdentity"}
+
+
+def require_program_identity(program):
+    require(isinstance(program, dict) and set(program) == {"launcher", "binaryDigest", "version"}, "execution-port-identity-unverified")
+    launcher, binary, version = program["launcher"], program["binaryDigest"], program["version"]
+    require(isinstance(launcher, str) and 0 < len(launcher) <= 1024 and launcher.startswith("/") and "\x00" not in launcher and posixpath.normpath(launcher) == launcher, "execution-port-identity-unverified")
+    require(isinstance(binary, str) and re.fullmatch(r"[0-9a-f]{64}", binary) is not None, "execution-port-identity-unverified")
+    require(isinstance(version, str) and 0 < len(version) <= 256, "execution-port-identity-unverified")
+    return program
+
+
+def host_program_identity(checks):
+    """Decode the Host's versioned identity check, never a Registry version allowance."""
+    require(isinstance(checks, list) and all(isinstance(check, dict) for check in checks), "execution-port-identity-unverified")
+    found = [check for check in checks if check.get("id") == "program-identity/v1"]
+    require(len(found) == 1 and found[0].get("passed") is True, "execution-port-identity-unverified")
+    detail = found[0].get("detail")
+    require(isinstance(detail, str) and len(detail) <= 2048, "execution-port-identity-unverified")
+    try:
+        program = json.loads(detail)
+    except (TypeError, ValueError):
+        raise ExecutionError("execution-port-identity-unverified") from None
+    require_program_identity(program)
+    require(canonical(program).decode("utf-8") == detail, "execution-port-identity-unverified")
+    return program
 
 
 class HostExecutionPort:
@@ -102,7 +129,9 @@ class HostExecutionPort:
         require(isinstance(found, ExecutionDiscovery), "execution-port-identity-unverified")
         require(found.connection_ref == intent["connectionRef"] and found.registry_provider == self.registration["provider"] and found.configuration_revision == intent["executionBinding"]["configurationRevision"] and (bool(found.protocol_provider) or self.mode=="standalone"), "execution-port-binding-mismatch")
         if self.purpose == "review":
-            require(found.profile == self.registration["profile"] == intent["profile"], "execution-port-profile-mismatch")
+            # The Registry binds policy fields. The Host supplies the program used by this attempt.
+            require(isinstance(found.profile, dict) and isinstance(intent.get("profile"), dict), "execution-port-profile-mismatch")
+            require(without_program(found.profile) == without_program(self.registration["profile"]) == without_program(intent["profile"]), "execution-port-profile-mismatch")
         else:
             # Version independence: the registration and the request bind every profile field except
             # programIdentity, which must be present, is schema-checked and is recorded per execution.
@@ -123,7 +152,7 @@ class HostExecutionPort:
         self.schemas.validate("ReviewerApplicability", r["applicability"])
         require(r["mode"] == self.mode and intent["portId"] == r["id"], "execution-port-unregistered")
         require(profile["purpose"] == "review", "execution-port-purpose-mismatch")
-        require(profile == r["profile"] == intent["profile"], "execution-port-profile-mismatch")
+        require(without_program(profile) == without_program(r["profile"]) == without_program(intent["profile"]), "execution-port-profile-mismatch")
         require(r["applicability"]["executionPort"] == self.mode and r["applicability"]["profileDigest"] == profile["digest"], "execution-port-profile-mismatch")
         require(r["approval_policy"] == profile["nativeApprovalPolicy"] and r["applicability"]["trustModel"] == profile["trustModel"], "execution-port-profile-mismatch")
         binding = intent["executionBinding"]
@@ -139,6 +168,12 @@ class HostExecutionPort:
             require(auth.owner_formal and intent.get("formal_review_authorized_by_owner") is True, "execution-port-capability-unverified")
         p = dict(scopeRef=intent["scopeRef"], profileId=profile["id"], profileDigest=profile["digest"], connectionRef=intent["connectionRef"], configurationRevision=binding["configurationRevision"], executionBinding=binding, constraints=intent["constraints"])
         result = await self.host.call("host.execution.preflight", p)
+        self.check_secrets(result)
+        if self.mode == "embedded":
+            program = host_program_identity(result.get("checks"))
+            require_program_identity(program)
+            require(self.program_identity is None or self.program_identity == program, "execution-port-identity-unverified")
+            self.program_identity = copy.deepcopy(program)
         require(result["status"] == "supported" and all(c["passed"] for c in result["checks"]), "execution-port-profile-mismatch")
         return auth
 
@@ -376,6 +411,13 @@ class HostExecutionPort:
             return
         if intent['executionBinding']['agent'] in ('agent:codex','codex'):
             require(e.get('readback',{}).get('modelProvider')==discovered.protocol_provider,'execution-port-binding-mismatch')
+        if self.mode == "embedded":
+            program = require_program_identity(e.get('programIdentity'))
+            # Recovery may use a new port object with no live preflight; the durable
+            # reservation's sealed intent remains the execution's identity anchor.
+            require(program == intent['profile']['programIdentity'] and
+                    (self.program_identity is None or program == self.program_identity),
+                    'execution-port-identity-unverified')
 
     async def read_result(self,rec,evidence):
         intent=rec["intent"]

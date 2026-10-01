@@ -695,6 +695,7 @@ class PortCase(unittest.IsolatedAsyncioTestCase):
         w = self.world
         registry = w.registry["registry"]
         registration = copy.deepcopy(next(p for p in registry["execution_ports"] if p["id"] == port_id))
+        self.host.program_identity = copy.deepcopy(registration["profile"]["programIdentity"])
         mapping = copy.deepcopy(next(m for m in registry["model_mappings"] if m["id"] == registration["mapping_id"]))
         extra = {k: v for k, v in self.request.items() if k not in ("schema", "subject", "taskId", "entry", "portId", "intent")}
         authorize = execution_authorizer(w.domain, TASK, rules.REVIEW_RELEASE, registration["mode"], lambda: w.generation,

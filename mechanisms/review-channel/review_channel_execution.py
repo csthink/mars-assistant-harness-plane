@@ -169,7 +169,11 @@ def verify_port_evidence(root,port,mapping,profile_checker=None):
     r=E.strict(raw);x=r.get('execution')
     require(r.get('receipt_schema')==C.RECEIPT_SCHEMA and x is not None and not receipt_common_problems(r) and profile_checker is not None and not profile_checker(r.get('effective_profile')),'product receipt schema')
     require(r.get('evidence_storage')==dict(kind='archive',repository_id=archive.repository_id,round_key=d['round_key']),'product evidence storage')
-    for k,v in [('port_id',port['id']),('mode',port['mode']),('profile',port['profile']),('reviewer_applicability',port['applicability']),('mapping_id',mapping['id']),('mapping_revision',mapping['revision']),('mapping_sha256',B.sha256_bytes(B.canonical_json(mapping)))]:require(x[k]==v,'product evidence '+k)
+    for k,v in [('port_id',port['id']),('mode',port['mode']),('reviewer_applicability',port['applicability']),('mapping_id',mapping['id']),('mapping_revision',mapping['revision']),('mapping_sha256',B.sha256_bytes(B.canonical_json(mapping)))]:require(x[k]==v,'product evidence '+k)
+    # The Registry's programIdentity is a historical registration fact. The signed
+    # Host execution evidence owns the actual program fact for each attempt.
+    require({k:v for k,v in x['profile'].items() if k!='programIdentity'}==
+            {k:v for k,v in port['profile'].items() if k!='programIdentity'},'product evidence profile')
     ep=r['effective_profile'];binding=x['execution_binding']
     for k,v in [('route_provider',port['provider']),('requested_model',port['model_ref']),('transport',port['transport']),('requested_effort',port['effort']),('effective_effort',port['effort']),('claimed_vendor',mapping['model_vendor'])]:require(ep[k]==v,'product evidence profile '+k)
     require(binding['model']==mapping['model_ref'] and binding['modelVendor']==mapping['model_vendor'] and binding['routeVendor']==mapping['route_vendor'],'product evidence model mapping')
@@ -196,6 +200,8 @@ def verify_port_evidence(root,port,mapping,profile_checker=None):
     envelope_doc=B.strict_json_load(envelope)
     require(envelope_doc.get('executionRef')==x['execution_ref'] and envelope_doc.get('operationId')==x['start_operation_id'] and envelope_doc.get('profileId')==x['profile']['id'] and envelope_doc.get('profileDigest')==x['profile']['digest'] and envelope_doc.get('actualBinding')==actual and envelope_doc.get('outcome')=='completed','product result envelope identity')
     answer=envelope_doc.get('evidence',{});raw_answer=answer.get('answer')
+    if x['mode']=='embedded':
+        require(answer.get('programIdentity')==x['program_identity'], 'product Host program identity')
     require(isinstance(raw_answer,str) and raw_answer.encode()==files[message] and answer.get('answerBytes')==len(files[message]) and answer.get('answerDigest')==x['final_message_sha256'],'product answer identity')
     status=port['capability']['status'];require(x['capability_suggestion']==status,'product capability suggestion')
     if status=='REVIEW_ENABLED':require(r['verdict_validation']=='VALID' and r['verdict_published'] is True and d['kind']=='round' and r['classification']=='completed_with_valid_verdict','product formal evidence')

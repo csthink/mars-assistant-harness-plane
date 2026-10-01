@@ -7,7 +7,7 @@ import sys
 import tempfile
 import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from execution.host import HostExecutionPort
+from execution.host import HostExecutionPort, host_program_identity
 from execution.port import ExecutionAuthorization, ExecutionDiscovery, ExecutionError, identity, sha
 from execution.materials import sealed_materials
 from make_fixture import create
@@ -27,10 +27,10 @@ def fixtures(scope, generation):
 
 class SyntheticHost:
     def __init__(self,generation):
-        self.context=dict(controlGeneration=generation);self.methods=[];self.start=None;self.captured=None;self.mode=None;self.cancelled=False
+        self.context=dict(controlGeneration=generation);self.methods=[];self.start=None;self.captured=None;self.mode=None;self.cancelled=False;self.preflight_checks=None
     async def call(self,method,p):
         self.methods.append(method)
-        if method=='host.execution.preflight':return dict(status='supported',checks=[dict(passed=True)])
+        if method=='host.execution.preflight':return dict(status='supported',checks=self.preflight_checks if self.preflight_checks is not None else [dict(id='program-identity/v1',passed=True,detail=json.dumps(self.program_identity,sort_keys=True,separators=(',',':')))])
         if method=='host.context.capture':
             self.captured=dict(**{k:p[k] for k in ('scopeRef','domainOperationId','operationId','requestDigest')},status='succeeded',snapshots=[dict(source=copy.deepcopy(x),snapshot=dict(x,authority='host',resourceHandle='snapshot:'+str(n))) for n,x in enumerate(p['sources'])])
             if self.mode=='capture-unknown':raise TimeoutError()
@@ -54,7 +54,7 @@ class SyntheticHost:
     def actual(self):return dict(model='gpt-6-sol',observedModels=['gpt-6-sol'],source='protocol-result')
     def result_bytes(self):
         s=self.start;answer='PROBE-OK'
-        e=dict(answer=answer,answerBytes=len(answer),answerDigest=sha(answer.encode()),readback=dict(modelProvider='openai'))
+        e=dict(answer=answer,answerBytes=len(answer),answerDigest=sha(answer.encode()),readback=dict(modelProvider='openai'),programIdentity=copy.deepcopy(self.program_identity))
         if self.mode=='bad-answer':e['answerDigest']='0'*64
         out=dict(**{k:s[k] for k in ('operationId','profileId','profileDigest')},executionRef='execution:one',actualBinding=self.actual(),outcome='completed',evidence=e)
         if self.mode=='bad-outer':out['operationId']='start:wrong'
@@ -70,7 +70,7 @@ class HostExecutionCases(unittest.IsolatedAsyncioTestCase):
         fixture=create(self.root/'fixture');self.seed=json.loads((self.root/'fixture/seed.json').read_text())
         self.domain=GitDomain(self.root/'fixture/domain',self.seed);generation=self.domain.acquire_generation()
         self.registration,self.mapping,self.intent=fixtures(fixture['scopeRef'],generation)
-        self.host=SyntheticHost(generation);self.port=self.make_port()
+        self.host=SyntheticHost(generation);self.host.program_identity=copy.deepcopy(self.registration['profile']['programIdentity']);self.port=self.make_port()
         self.seal=self.root/'seal';self.seal.mkdir();(self.seal/'instruction').write_text('Original document\n')
         raw=(self.seal/'instruction').read_bytes();inputs=[dict(bundle_name='instruction',bytes=len(raw),sha256=sha(raw))]
         self.manifest=dict(inputs=inputs,manifest_sha256=sha(json.dumps(inputs,sort_keys=True,separators=(',',':')).encode()))
@@ -82,6 +82,43 @@ class HostExecutionCases(unittest.IsolatedAsyncioTestCase):
         port.bind_result_scanner(self,lambda:[])
         return port
     def reserve(self):return self.port.reserve(self.intent,self.seal,b'Review these files',self.manifest)
+    async def test_identity_check_missing_duplicate_failed_or_malformed_stops_before_start(self):
+        good=dict(id='program-identity/v1',passed=True,detail=json.dumps(self.host.program_identity,sort_keys=True,separators=(',',':')))
+        cases=[[],[good,good],[dict(good,passed=False)],[dict(good,detail='not-json')],
+               [dict(good,detail=json.dumps(self.host.program_identity))],
+               [dict(good,detail=json.dumps(dict(self.host.program_identity,binaryDigest='bad'),sort_keys=True,separators=(',',':')))]]
+        for checks in cases:
+            with self.subTest(checks=checks):
+                self.host.preflight_checks=checks;self.port=self.make_port()
+                with self.assertRaises(ExecutionError) as error:await self.port.execute(self.reserve())
+                self.assertEqual(error.exception.code,'execution-port-identity-unverified')
+                self.assertNotIn('host.execution.start',self.host.methods)
+    async def test_identity_changes_between_preflights_stop_before_start(self):
+        original=self.host.call;count=0
+        async def switch(method,params):
+            nonlocal count
+            if method=='host.execution.preflight':
+                count+=1
+                if count==2:self.host.program_identity=dict(self.host.program_identity,version='new-version')
+            return await original(method,params)
+        self.host.call=switch
+        with self.assertRaises(ExecutionError) as error:await self.port.execute(self.reserve())
+        self.assertEqual(error.exception.code,'execution-port-identity-unverified')
+        self.assertNotIn('host.execution.start',self.host.methods)
+    async def assert_result_identity_rejected(self,variant):
+        original=self.host.result_bytes
+        def altered():
+            value=json.loads(original())
+            if variant=='missing':del value['evidence']['programIdentity']
+            elif variant=='malformed':value['evidence']['programIdentity']['binaryDigest']='not-a-digest'
+            else:value['evidence']['programIdentity']['version']='different-version'
+            return json.dumps(value).encode()
+        self.host.result_bytes=altered
+        with self.assertRaises(ExecutionError) as error:await self.port.execute(self.reserve())
+        self.assertEqual(error.exception.code,'execution-port-identity-unverified')
+    async def test_result_identity_missing_is_rejected(self):await self.assert_result_identity_rejected('missing')
+    async def test_result_identity_malformed_is_rejected(self):await self.assert_result_identity_rejected('malformed')
+    async def test_result_identity_different_is_rejected(self):await self.assert_result_identity_rejected('different')
     async def test_distinct_ids_material_roles_actual_instruction_hash_and_once(self):
         r=self.reserve();result=await self.port.execute(r)
         self.assertEqual(result['answer'],b'PROBE-OK');self.assertTrue(result['reservation']['protected'])
