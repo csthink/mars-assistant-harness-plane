@@ -55,6 +55,19 @@ class IdentityCases(unittest.IsolatedAsyncioTestCase):
             elif isinstance(value,int):wrong['profile'][field]=value+1
             elif isinstance(value,list):wrong['profile'][field]=value+['unexpected']
             else:wrong['profile'][field]['version']='new-unverified'
+            if field=='programIdentity':
+                # Registry identity is historical; the Host check supplies this attempt's program.
+                await self.port.preflight(wrong)
+                self.assertEqual(self.port.program_identity,self.host.program_identity)
+                original=copy.deepcopy(self.host.program_identity)
+                self.host.program_identity=copy.deepcopy(wrong['profile']['programIdentity'])
+                with self.assertRaises(ExecutionError) as error:await self.port.preflight(self.intent)
+                self.assertEqual(error.exception.code,'execution-port-identity-unverified')
+                next_attempt=self.make_port()
+                await next_attempt.preflight(self.intent)
+                self.assertEqual(next_attempt.program_identity,self.host.program_identity)
+                self.host.program_identity=original
+                continue
             with self.subTest(field=field),self.assertRaises(ExecutionError):await self.port.preflight(wrong)
         for field,value in [('portId','other'),('transport','http'),('effort','low'),('credentialRevision','9')]:
             wrong=copy.deepcopy(self.intent);wrong[field]=value
