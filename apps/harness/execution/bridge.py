@@ -21,6 +21,13 @@ import review_channel_execution as X
 import review_channel_runtime as RT
 
 
+def same_applicability_policy(previous, current):
+    """Across rounds the policy/mapping must match; the installed program may change."""
+    return (isinstance(previous, dict) and isinstance(current, dict)
+            and {k:v for k,v in previous.items() if k!='program_identity'}
+            == {k:v for k,v in current.items() if k!='program_identity'})
+
+
 class ProductReview:
     INLINE_DELIVERY=False
 
@@ -56,7 +63,10 @@ class ProductReview:
             for key in ('caller','invocation_authorization','formal_review_authorized_by_owner'):
                 require(request[key]==self.intent[key],'execution-port-capability-unverified')
             if previous is not None:
-                require(previous['receipt'].get('execution') is not None and previous['receipt']['effective_profile'].get('execution_applicability')==self.applicability,'inherit-unmaterializable')
+                # A previous round binds policy and mapping, not an obsolete installed binary.
+                require(previous['receipt'].get('execution') is not None and same_applicability_policy(
+                        previous['receipt']['effective_profile'].get('execution_applicability'),self.applicability),
+                        'inherit-unmaterializable')
             auth=self.sync(self.port.authority(self.intent))
             require(set(request['model_vendors'])==set(auth.author_vendors) and request['artifact_author']['human_only']==auth.human_only,'eligibility')
             self.mode=mode
@@ -65,6 +75,13 @@ class ProductReview:
     def preflight(self,ctx):
         try:
             self.sync(self.port.preflight(self.intent))
+            if self.port.mode=='embedded':
+                require(self.port.program_identity is not None,'execution-port-identity-unverified')
+                self.intent['profile']['programIdentity']=copy.deepcopy(self.port.program_identity)
+                self.applicability=X.effective_applicability(dict(port_id=self.port.registration['id'],mode=self.port.mode,
+                    profile=self.intent['profile'],reviewer_applicability=self.port.registration['applicability'],
+                    mapping_id=self.port.mapping['id'],mapping_revision=self.port.mapping['revision'],
+                    mapping_sha256=sha(B.canonical_json(self.port.mapping))))
             return dict(execution_port=self.port.registration['id'],mode=self.port.mode,profile_digest=self.intent['profile']['digest'])
         except ExecutionError as exc:raise B.PreflightError(exc.code,'execution preflight rejected') from exc
 

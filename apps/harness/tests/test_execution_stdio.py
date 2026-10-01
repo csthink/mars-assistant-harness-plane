@@ -58,11 +58,11 @@ class HostDriver:
     def actual(self):return dict(model=self.start['model'],observedModels=[self.start['model']],source='protocol-result')
     def result(self):
         s=self.start;answer=self.answer()
-        return json.dumps(dict(**{k:s[k] for k in ('operationId','profileId','profileDigest')},executionRef='execution:synthetic',actualBinding=self.actual(),outcome='completed',evidence=dict(answer=answer.decode(),answerBytes=len(answer),answerDigest=sha(answer),readback=dict(modelProvider='protocol-independent')))).encode()
+        return json.dumps(dict(**{k:s[k] for k in ('operationId','profileId','profileDigest')},executionRef='execution:synthetic',actualBinding=self.actual(),outcome='completed',evidence=dict(answer=answer.decode(),answerBytes=len(answer),answerDigest=sha(answer),readback=dict(modelProvider='protocol-independent'),programIdentity=self.job['registration']['profile']['programIdentity']))).encode()
     async def handle(self,method,p):
         if method=='host.grants.get':
             i=self.job['intent'];return dict(grants=[dict(ref=r,installationId=self.context['installationId'],instanceId=self.context['instanceId'],scopeRef=i['scopeRef'],resourceHandle=i['resourceHandle'],capability='hp.synthetic',operation='runtime.resource.read',executionRef=None,bundleDigest='b'*64,expiresAt='2099-01-01T00:00:00Z',status='active',purpose='synthetic material read') for r in p['grantRefs']])
-        if method=='host.execution.preflight':return dict(status='supported',profileDigest=p['profileDigest'],checks=[dict(id='synthetic',passed=True,detail='No real model')],reason='synthetic')
+        if method=='host.execution.preflight':return dict(status='supported',profileDigest=p['profileDigest'],checks=[dict(id='synthetic',passed=True,detail='No real model'),dict(id='program-identity/v1',passed=True,detail=json.dumps(self.job['registration']['profile']['programIdentity'],sort_keys=True,separators=(',',':')))],reason='synthetic')
         if method=='host.context.capture':
             snapshots=[]
             for n,source in enumerate(p['sources']):
