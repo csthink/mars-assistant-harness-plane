@@ -102,6 +102,21 @@ class SourceResolution(AcceptanceCase):
         r = resolve(str(self.directory / "nowhere"), "feature", "feature-t0", "main")
         self.assertEqual(r["outcome"], "UNRESOLVED")
 
+    def test_task_id_grammar_is_the_review_channel_definition(self):
+        """Acceptance and review routing share one task-id grammar, the review channel's TASK_ID_RE of this hp tree."""
+        from domain.acceptance import sources
+        from domain.channel_contract import CONTRACT, PATH
+        self.assertIs(sources.RE_TASK_ID, CONTRACT.TASK_ID_RE)
+        self.assertEqual(PATH, APP.parents[1] / "mechanisms" / "review-channel" / "review_channel_contract.py")
+        self.assertEqual(Path(CONTRACT.__file__).resolve(), PATH)
+        for task_id in ("feature-t0", "design-t0", "gov-t0", "feature-t12"):
+            self.assertTrue(sources.RE_TASK_ID.match(task_id) and CONTRACT.TASK_RECORD_RE.match(task_id), task_id)
+        for task_id in ("feature-t00", "gov-t01", "feature-t", "hotfix-h" + "0" * 64):
+            self.assertIsNone(sources.RE_TASK_ID.match(task_id), task_id)
+        repo, _, _ = self.product_line("padded")
+        r = resolve(str(repo), "feature", "feature-t00", "main")
+        self.assertEqual((r["outcome"], r["reason"]), ("UNRESOLVED", "task id does not match the milestones task-id grammar"))
+
     def test_indeterminate_when_git_cannot_answer(self):
         """AC-02: an unreadable source system yields INDETERMINATE, never a missing-component claim."""
         repo, _, _ = self.product_line()

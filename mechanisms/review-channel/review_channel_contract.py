@@ -29,8 +29,12 @@ EFFORTS = ("minimal", "low", "medium", "high", "xhigh")
 MODES = ("preflight", "probe", "review")
 SUBJECT_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 ROUND_RE = re.compile(r"^r[1-9][0-9]*$")
-# task-artifact-schema §8.3 顶层 ID 闭集
-TASK_RECORD_RE = re.compile(r"^(?:(?:feature|design|gov)-t[1-9][0-9]*|hotfix-h[0-9a-f]{64})$")
+# task record ID 文法的唯一定义（与 task.template.md 页首引导块同值：N 自 0 起、不补零）。TASK_ID_RE 是任务名单编号
+# （feature / design / gov），Domain Core 的来源核验（apps/harness/domain/acceptance/sources.py）复用它，不另写文法；
+# TASK_RECORD_RE 在同一模式之外只多 hotfix 记录编号。
+TASK_ID_PATTERN = r"(feature|design|gov)-t(0|[1-9][0-9]*)"
+TASK_ID_RE = re.compile(r"^" + TASK_ID_PATTERN + r"$")
+TASK_RECORD_RE = re.compile(r"^(?:" + TASK_ID_PATTERN + r"|hotfix-h[0-9a-f]{64})$")
 QUESTION_ID_RE = re.compile(r"^Q-[A-Z]+$")   # 五题闭集题号文法（§6.4，Amendment 4）：与旧 Q<n> / STD-<n> 不相交
 RESIDUAL_ID_RE = re.compile(r"^RES-[1-9][0-9]*$")
 

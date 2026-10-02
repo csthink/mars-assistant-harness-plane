@@ -1204,5 +1204,25 @@
       "registry.legacy-receipt-read-semantics",
       "receipt.legacy-shape-semantics"
     ]
+  },
+  {
+    "id": "M185-task-id-zero-refused",
+    "file": "review_channel_contract.py",
+    "find": "TASK_ID_PATTERN = r\"(feature|design|gov)-t(0|[1-9][0-9]*)\"\n",
+    "replace": "TASK_ID_PATTERN = r\"(feature|design|gov)-t([1-9][0-9]*)\"\n",
+    "must_fail": [
+      "contract.closed-sets",
+      "request.minimal-route"
+    ]
+  },
+  {
+    "id": "M186-task-id-padding-accepted",
+    "file": "review_channel_contract.py",
+    "find": "TASK_ID_PATTERN = r\"(feature|design|gov)-t(0|[1-9][0-9]*)\"\n",
+    "replace": "TASK_ID_PATTERN = r\"(feature|design|gov)-t([0-9]+)\"\n",
+    "must_fail": [
+      "contract.closed-sets",
+      "request.minimal-route"
+    ]
   }
 ]

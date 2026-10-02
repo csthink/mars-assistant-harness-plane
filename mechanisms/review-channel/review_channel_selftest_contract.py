@@ -51,6 +51,13 @@ def closed_sets(e):
     e.check(m and m.groups() == ("R12", "H", "3"), "finding id grammar")
     e.check(not C.FINDING_ID_RE.match("R1-X1") and not C.FINDING_ID_RE.match("r1-B1"), "finding id negatives")
     e.check(C.TASK_RECORD_RE.match("gov-t8") and C.TASK_RECORD_RE.match("feature-t12") and not C.TASK_RECORD_RE.match("gov-t08"), "task id grammar")
+    # task.template.md 页首引导块：N 自 0 起、不补零；TASK_ID_RE 与 TASK_RECORD_RE 同一模式（hotfix 只属于后者）
+    zero = ("feature-t0", "design-t0", "gov-t0")
+    e.check(all(C.TASK_ID_RE.match(t) and C.TASK_RECORD_RE.match(t) for t in zero), "task id grammar starts at t0")
+    e.check(not any(C.TASK_ID_RE.match(t) or C.TASK_RECORD_RE.match(t) for t in ("feature-t00", "gov-t01", "feature-t", "task-t1")),
+            "task id grammar refuses padded, empty and unknown forms")
+    hotfix = "hotfix-h" + "a" * 64
+    e.check(C.TASK_RECORD_RE.match(hotfix) and not C.TASK_ID_RE.match(hotfix), "hotfix is a task record, not a milestones task id")
 
 
 def cases():
