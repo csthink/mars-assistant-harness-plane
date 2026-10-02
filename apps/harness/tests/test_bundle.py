@@ -26,7 +26,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from bundle import archive, build, layout, release
+from bundle import archive, build, layout, manifest, release
 from bundle.layout import BuildRefusal
 from runtime.protocol import Schemas
 import bundle_fixture as BF
@@ -37,6 +37,9 @@ from product_line import create_product_line, git
 import instance_area
 
 APP = Path(__file__).resolve().parents[1]
+# J-04 profiles (review channel design §7.5): the Reviewer policy that keeps Codex skill instructions out, and the r2 Implementer.
+REVIEWER_DIGEST = "c30bd24676b535c1e1422a58c686a2edb7a4a7719fcd9b912119f161744792ce"
+IMPLEMENTER_DIGEST = "2c9583da0f4101cc04e86251d85ba15c3a2bc9d6fda024f8d79081566744f16c"
 # feature-t7 AC-08 reference edge sequence (records/diagnostics/feature-t7/2026-09-23/implementation-r1/report.json,
 # persistentState of test_publish.PublishCase.test_j03_minimal_path_from_acceptance_to_published).
 T7_J03_EDGES = ["E-D01", "E-D02", "E-D04", "E-D09", "E-D17", "E-I01", "E-I02", "E-I03", "E-I04", "E-I06", "E-V02", "E-V06"]
@@ -337,11 +340,47 @@ class BuildCase(Case):
 
     def test_ac09_descriptors_name_no_program_version(self):
         """AC-09: manifest, launch.json, capability and profile requirements carry no Agent or platform program version or digest."""
-        self.assertEqual(self.b.manifest["executionProfileRequirements"], [])
         self.assertEqual(self.b.manifest["dependencies"], [])
-        text = (self.b.by_path["manifest.json"][0] + self.b.by_path["launch.json"][0]).decode().lower()
+        requirements = self.b.manifest["executionProfileRequirements"]
+        others = dict(self.b.manifest, executionProfileRequirements=[])
+        text = (json.dumps(others) + self.b.by_path["launch.json"][0].decode()).lower()
         for needle in ("claude", "codex", "programidentity", "binarydigest", "gh ", "version\": \"2."):
             self.assertNotIn(needle, text)
+        # Requirements name policy profiles (id, version, policy digest) only: no launcher, program version or binary digest.
+        self.assertTrue(all(set(r) == {"capabilityId", "profile"} and set(r["profile"]) == {"id", "version", "digest"}
+                            for r in requirements))
+        requirement_text = json.dumps(requirements).lower()
+        for needle in ("programidentity", "binarydigest", "launcher", "0.155", "0.159", "/bin/"):
+            self.assertNotIn(needle, requirement_text)
+
+    def test_profile_requirements_name_the_j04_profiles(self):
+        """Manifest executionProfileRequirements: the Definition and Validate Change reviews need the Registry's embedded Reviewer profile, Implement/Verify needs the J-04 Implementer profile."""
+        registry = json.loads((BF.REPOSITORY / manifest.REGISTRY).read_text())
+        ports = [p for p in registry["execution_ports"] if p["mode"] == "embedded" and p["profile"]["purpose"] == "review"]
+        self.assertEqual(len(ports), 1)
+        reviewer = {k: ports[0]["profile"][k] for k in ("id", "version", "digest")}
+        self.assertEqual(reviewer, dict(id="review/codex-native-readonly", version="1", digest=REVIEWER_DIGEST))
+        implementer = dict(id="coding-implementer/claude-print-restricted", version="1", digest=IMPLEMENTER_DIGEST)
+        self.assertEqual(self.b.manifest["executionProfileRequirements"], [
+            dict(capabilityId="harness.definition", profile=reviewer),
+            dict(capabilityId="harness.implement-verify", profile=implementer),
+            dict(capabilityId="harness.validate-change", profile=reviewer)])
+        declared = {c["id"] for c in self.b.manifest["capabilities"]}
+        self.assertTrue({r["capabilityId"] for r in self.b.manifest["executionProfileRequirements"]} <= declared)
+        self.assertEqual(BH.manifest_problems(self.b.manifest), [])
+
+    def test_profile_requirements_refuse_an_ambiguous_registry(self):
+        """The Reviewer requirement comes from exactly one embedded review port; none, two or a malformed reference refuse the build."""
+        registry = json.loads((BF.REPOSITORY / manifest.REGISTRY).read_text())
+        port = next(p for p in registry["execution_ports"] if p["mode"] == "embedded")
+        capabilities = self.b.manifest["capabilities"]
+        for name, ports in (("none", []), ("two", [port, port]), ("malformed", [dict(port, profile=dict(port["profile"], digest="short"))])):
+            with self.subTest(case=name), self.assertRaises(BuildRefusal):
+                manifest.profile_requirements(json.dumps(dict(registry, execution_ports=ports)).encode(), capabilities)
+        with self.assertRaises(BuildRefusal):
+            manifest.profile_requirements(b"not json", capabilities)
+        with self.assertRaises(BuildRefusal):
+            manifest.profile_requirements(json.dumps(registry).encode(), [c for c in capabilities if c["id"] != "harness.definition"])
 
     def test_ac10_no_private_key_material_in_the_outputs(self):
         """AC-10: no member, import file or build record carries private key markers or encodings."""
@@ -463,7 +502,12 @@ class LaunchCase(Case):
         result = h.call("runtime.initialize", offered)
         BH.BundleHost.check_initialized(offered, result)
         self.assertEqual([c["id"] for c in result["capabilities"]], [c["id"] for c in offered["capabilities"]])
-        self.assertEqual(result["executionProfiles"], [])
+        ids = {c["id"] for c in offered["capabilities"]}
+        expected = []
+        for r in installation.verdict.manifest["executionProfileRequirements"]:
+            if r["capabilityId"] in ids and r["profile"] not in expected:
+                expected.append(r["profile"])
+        self.assertEqual(result["executionProfiles"], expected)
         h.context = result["context"]
         h.call("runtime.ready")
         self.assertEqual(h.call("runtime.health")["health"], "ready")
@@ -479,6 +523,37 @@ class LaunchCase(Case):
         self.assertEqual(process.returncode, 2)
         self.assertEqual(process.stdout, b"")
         self.assertIn(b"contract digest", process.stderr)
+
+    def test_profile_requirements_select_offered_profiles_and_drop_unmet_capabilities(self):
+        """Profile requirements: offered J-04 profiles are selected and keep every capability; a missing profile or one with another digest drops exactly the capabilities that need it."""
+        installation, repo = self.ready()
+        manifest_ = installation.verdict.manifest
+        requirements = manifest_["executionProfileRequirements"]
+        all_ids = [c["id"] for c in manifest_["capabilities"]]
+        catalog = BH.offered_profiles(manifest_)
+        refs = [{k: p[k] for k in ("id", "version", "digest")} for p in catalog]
+        self.assertEqual(sorted(refs, key=lambda r: r["id"]), sorted([
+            dict(id="coding-implementer/claude-print-restricted", version="1", digest=IMPLEMENTER_DIGEST),
+            dict(id="review/codex-native-readonly", version="1", digest=REVIEWER_DIGEST)], key=lambda r: r["id"]))
+        reviewer = next(p for p in catalog if p["purpose"] == "review")
+        implementer = next(p for p in catalog if p["purpose"] == "coding-implementer")
+        void = dict(reviewer, digest="8061614dbefcbb03bab19bb15b2c23a1427d4555ffadd06ea859bed8b83a5d63",
+                    configurationDigest="8061614dbefcbb03bab19bb15b2c23a1427d4555ffadd06ea859bed8b83a5d63")
+        needing = lambda profile: {r["capabilityId"] for r in requirements if r["profile"]["id"] == profile["id"]}
+        cases = [("all-offered", catalog, set()), ("none-offered", [], needing(reviewer) | needing(implementer)),
+                 ("reviewer-missing", [implementer], needing(reviewer)), ("implementer-missing", [reviewer], needing(implementer)),
+                 ("reviewer-void-digest", [void, implementer], needing(reviewer))]
+        for name, profiles, dropped in cases:
+            with self.subTest(case=name):
+                h = self.host(installation)
+                offered = installation.initialize_params(executionProfiles=profiles)
+                result = h.call("runtime.initialize", offered)
+                BH.BundleHost.check_initialized(offered, result)
+                self.assertEqual([c["id"] for c in result["capabilities"]], [i for i in all_ids if i not in dropped])
+                kept = [{k: p[k] for k in ("id", "version", "digest")} for p in profiles
+                        if any(r["profile"] == {k: p[k] for k in ("id", "version", "digest")} for r in requirements)]
+                self.assertEqual(sorted(result["executionProfiles"], key=lambda r: r["id"]), sorted(kept, key=lambda r: r["id"]))
+                h.close()
 
     def test_ac05_integrity_and_negotiation_refusals(self):
         """AC-05: a bundleDigest or permissionProfileDigest other than the bundle's own is INTEGRITY_MISMATCH; unsupported protocol and required capability are refused; none reaches ready."""

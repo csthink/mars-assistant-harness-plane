@@ -310,6 +310,8 @@ apps/harness/.venv/bin/python -B apps/harness/bundle/build.py --repository <hp �
 
 启动：入口 `python/bin/python3.12`，`direct` 启动器，argv 模板 `-I -B -m hp serve-stdio --bundle --runtime-root ${runtimeRoot} --instance-dir ${instanceDir} --contract-digest ${contractDigest}`，只用冻结闭集占位符，不用 `${resourceHandle}`，不读环境变量推导路径（`-I` 忽略 PYTHON* 变量，入口启动时移除七个仓库定位类 GIT_* 变量）。Runtime 启动时核对契约摘要参数，按 `bundle.json` 逐成员核对并以同一写出器重建 archive 得到自身真实摘要；Initialize 的 bundleDigest、launchAuthorization.bundleDigest 与 permissionProfileDigest 须等于自身值，否则 INTEGRITY_MISMATCH 且不进入 ready。
 
+Manifest 的 `executionProfileRequirements` 声明三项可选能力依赖的执行 profile（只含 id、version 与策略 digest，不含程序身份）：`harness.definition` 与 `harness.validate-change` 依赖构建提交中 Registry 唯一 embedded 评审端口的 Reviewer profile，`harness.implement-verify` 依赖评审通道设计 §7.5 的 J-04 Implementer profile。Host 在 Initialize 的 `executionProfiles` 提供同一 id、version 与 digest 时该 profile 被选中、能力保留；未提供或 digest 不同时按 Contract 把对应能力从协商结果移除。Registry 中 embedded 评审端口不是恰好一个时构建拒绝。
+
 仓与执行绑定只来自实例目录中的绑定文件 `hp-binding.json`，在接收机器上由 Human 以包内 CLI 写入：
 
 ```sh

@@ -114,7 +114,9 @@ def build(*, repository, commit, inputs_dir, runtime_id, publisher_id, source_re
     capabilities, capability_members = manifest.capability_members(report)
     launch = manifest.launch_bytes()
     permission_profile_digest = sha256(launch)
-    manifest_bytes = manifest.manifest_bytes(runtime_id, publisher_id, version, capabilities, permission_profile_digest)
+    requirements = manifest.profile_requirements(tree.blob(manifest.REGISTRY)[0], capabilities)
+    manifest_bytes = manifest.manifest_bytes(runtime_id, publisher_id, version, capabilities, permission_profile_digest,
+                                             requirements)
     body = [("manifest.json", manifest_bytes, "0644"), ("launch.json", launch, "0644")] + capability_members + members
     bundle_json = manifest.bundle_bytes(runtime_id=runtime_id, version=version, commit=commit, source_reference=source_reference,
                                         inputs=inputs, capabilities=capabilities, members=body)
