@@ -11,6 +11,7 @@ import re
 import rfc8785
 
 from domain.acceptance.gitrepo import GitAbsent, GitUnavailable, Repository
+from domain.channel_contract import CONTRACT
 
 RESOLVED, UNRESOLVED, INDETERMINATE = "RESOLVED", "UNRESOLVED", "INDETERMINATE"
 TASK_TYPES = ("feature", "hotfix")
@@ -20,7 +21,8 @@ RE_SUBJECT = re.compile(r"^> 权威状态: subject `([A-Za-z0-9][A-Za-z0-9._-]*)
 RE_MILESTONE_H3 = re.compile(r"^### (M-([0-9]+)) (\S.*?)(?: · Supersedes：(\S.*?))?(?: · WITHDRAWN in milestones\.md@r[1-9][0-9]*)?$")
 RE_TASK_LINE = re.compile(r"^  - (\S+) (.+?) · 类型：(\S+) · Spec 引用：(.+?) · 依赖：(.+?)"
                           r"(?: · Supersedes：(\S.*?))?(?: · WITHDRAWN in milestones\.md@r[1-9][0-9]*)?$")
-RE_TASK_ID = re.compile(r"^(feature|design|gov)-t(0|[1-9][0-9]*)$")
+# The milestones task-id grammar is the review channel's TASK_ID_RE: one definition for acceptance and review routing.
+RE_TASK_ID = CONTRACT.TASK_ID_RE
 RE_WITHDRAWN = re.compile(r" · WITHDRAWN in milestones\.md@r[1-9][0-9]*$")
 
 def sha256(raw):

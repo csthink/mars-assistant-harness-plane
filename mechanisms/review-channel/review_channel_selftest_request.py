@@ -110,6 +110,11 @@ def minimal_route(e):
                      (json.dumps(dict(good(), task_record="gov-t01")).encode(), "task_record grammar"),
                      (json.dumps({k: v for k, v in good().items() if k != "subject"}).encode(), "subject missing")):
         e.expect_error(lambda b=bad: R.minimal_route(b), exc_type=base.UnrouteableError, message="unrouteable: " + why)
+    for record in ("feature-t0", "design-t0", "gov-t0"):
+        e.check(R.minimal_route(json.dumps(dict(good(), task_record=record)).encode())["task_record"] == record,
+                "task_record %s routes on the task axis" % record)
+    e.expect_error(lambda: R.minimal_route(json.dumps(dict(good(), task_record="feature-t00")).encode()),
+                   exc_type=base.UnrouteableError, message="unrouteable: padded t00")
     obj = good(); del obj["task_record"]
     e.check(R.minimal_route(json.dumps(obj).encode())["task_record"] is None, "subject axis when task_record absent")
     obj = good(); obj["caller"] = 5  # 完整校验失败但仍可路由

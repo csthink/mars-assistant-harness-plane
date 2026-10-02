@@ -181,7 +181,9 @@ subject                 必填，字符串，文法 ^[a-z0-9][a-z0-9-]*$；任�
 stage                   必填，闭集 task | impl（本设计自承载的闭集，原 task-artifact-schema §10.1；扩值须本设计 amendment 并同批更新 `task.template.md` 引导块的 `reviews/<stage>-r<N>/` 成员文法）
 round                   必填，文法 ^r[1-9][0-9]*$（各 stage 自 r1 严格递增，本设计自承载，原 task-artifact-schema §10.1；本设计不设 c 轮，确认轮就是下一个 r 轮）
 caller                  必填，非空字符串，UTF-8 不超过 256 bytes；外部 Host 使用稳定调用方标识（记录用，不参与任何判定）
-task_record             可选，task record ID 文法（`TASK_RECORD_RE`，与 `task.template.md` 页首引导块同值；原 task-artifact-schema §8.3）；在场即任务轴落点，缺席即 subject 轴落点（§8.1）
+task_record             可选，task record ID 文法（`TASK_RECORD_RE`，与 `task.template.md` 页首引导块同值：编号自 t0 起、不补零；原 task-artifact-schema §8.3）；在场即任务轴落点，缺席即 subject 轴落点（§8.1）
+                        `review_channel_contract.py` 是该文法的唯一定义：`TASK_ID_RE` 为其 feature / design / gov 部分，
+                        Domain Core 的来源核验复用同一常量，不另写文法
 artifact_author         必填，{human_only: bool, authors: [{tool, model, vendor}]}；authors 每项三字段均为非空字符串，
                         tool = 产出方调用工具（如 claude-code、codex-cli、human），model = 精确模型标识（human 时取 "human"），
                         vendor = 模型提供方，须逐字命中 §6.11 `vendors` 闭集（大小写敏感，表外 fail closed）；
