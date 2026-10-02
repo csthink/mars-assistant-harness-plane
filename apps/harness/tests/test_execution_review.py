@@ -136,6 +136,45 @@ class ReviewCases(unittest.IsolatedAsyncioTestCase):
     async def test_probe_suggests_call_only(self):
         code,_=await self.run_review('probe');self.assertEqual(code,0)
         self.assertEqual(self.receipts()[-1]['execution']['capability_suggestion'],'CALL_ONLY')
+    async def test_refusal_before_attempt_reaches_the_domain_with_its_reason(self):
+        """A request the channel cannot route ends before any attempt, Receipt or Host request; the runner outcome is a preflight failure with the channel's code and text, and the round record keeps them."""
+        from domain.definition import dispatch, review
+        code,bridge=await self.run_review(task_record='feature-t00')
+        self.assertEqual(code,1)
+        refused=dict(code='request-unrouteable',problems=['task_record present but malformed'])
+        self.assertEqual(bridge.refusal(),refused)
+        self.assertEqual((bridge.reservations,self.receipts(),self.host.methods),({},[],[]))
+        outcome=dispatch.unread_outcome(bridge,code)
+        self.assertEqual(outcome,dict(classification='preflight_failed',failureCode='request-unrouteable',
+                                      problems=['task_record present but malformed'],runnerCode=1))
+        self.assertEqual(review.failure_of(outcome),('EXECUTION_FAILED',dict(classification='preflight_failed',
+                         failureCode='request-unrouteable',problems=['task_record present but malformed'])))
+    async def test_t0_task_record_is_routed_and_reviewed(self):
+        """A task numbered from t0 is routed on the task axis and the formal review completes through the Host."""
+        for d in ('tasks/feature-t0/reviews','tasks/feature-t0/rulings'):(Path(self.repo.root)/d).mkdir(parents=True)
+        code,bridge=await self.run_review(task_record='feature-t0')
+        self.assertEqual(code,0,(bridge.reports,bridge.diagnostics))
+        self.assertIsNone(bridge.refusal())
+        self.assertIn('host.execution.start',self.host.methods)
+        published=Path(self.repo.root)/'tasks/feature-t0/reviews/impl-r1'
+        self.assertTrue((published/'receipt-r1.json').is_file(),sorted(p.name for p in published.parent.iterdir()))
+        self.assertEqual(json.loads((published/'receipt-r1.json').read_text())['task_record'],'feature-t0')
+    async def test_refusal_needs_no_attempt_and_no_reservation(self):
+        """Only a refusal before allocation and before any port reservation is determinate; everything else stays unknown and keeps the channel output."""
+        from domain.definition import dispatch
+        bridge=ProductReview(self.port,self.intent,lambda:[])
+        bridge.reports=[dict(mode='review',state='REJECTED',failure_code='evidence-pending',problems=['pending round'])]
+        self.assertEqual(bridge.refusal(),dict(code='evidence-pending',problems=['pending round']))
+        bridge.reports=[];bridge.diagnostics=['request-unrouteable: request file unreadable (OSError)']
+        self.assertEqual(bridge.refusal(),dict(code='request-unrouteable',problems=['request file unreadable (OSError)']))
+        bridge.reservations={1:'reservation'}
+        self.assertIsNone(bridge.refusal())
+        bridge.reservations={};bridge.diagnostics=['attempt-alloc-failed: OSError']
+        bridge.reports=[dict(attempt_id='a1',classification='preflight_failed',failure_code='secret-in-input',receipt='r')]
+        self.assertIsNone(bridge.refusal())
+        unknown=dispatch.unread_outcome(bridge,2)
+        self.assertEqual((unknown['classification'],unknown['failureCode'],unknown['diagnostics'],unknown['reports']),
+                         ('unknown','channel-result-not-read',['attempt-alloc-failed: OSError'],bridge.reports))
     async def test_known_secret_request_rejected_before_host(self):
         code,_=await self.run_review(caller='sk-fake-secret-value-123');self.assertEqual(code,1)
         self.assertEqual(self.receipts()[-1]['failure_code'],'secret-in-input');self.assertEqual(self.host.methods,[])

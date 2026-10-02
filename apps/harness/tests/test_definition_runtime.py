@@ -219,6 +219,33 @@ class DefinitionRuntime(unittest.TestCase):
         self.assertTrue(attempt["startedAt"] and attempt["settledAt"])
         self.assertEqual(inst["position"], gate.AUTH_GATE)
 
+    def test_channel_refusal_before_attempt_settles_the_round_and_the_operation(self):
+        """A channel refusal before any attempt settles the round as an execution failure that keeps the channel's code and text, and the dispatch operation settles with it."""
+        self.fixture(definition_review=True)
+        host = self.start(verdict="REFUSED")
+        host.invoke(host.action("definition.submit"), self.submit_payload())
+        version = self.state()["tasks"]["feature-t0"]["workflowInstance"]["runtimeVersion"]
+        op, _p = host.invoke(host.action("definition.dispatch"), dict(taskId="feature-t0", expectedRuntimeVersion=version))
+        done = self.wait_operation(host, op["operationId"], ("succeeded", "failed", "unknown"))
+        self.assertEqual((done["status"], done["resultCode"]), ("failed", "EXECUTION-SETTLED"))
+        state = self.state()
+        reason = dict(classification="preflight_failed", failureCode="request-unrouteable",
+                      problems=["task_record present but malformed"])
+        round_record = state["tasks"]["feature-t0"]["taskDefinition"]["rounds"][-1]
+        self.assertEqual(round_record["status"], "execution-failed")
+        self.assertEqual(round_record["failure"], dict(status="EXECUTION_FAILED", **reason))
+        inst = state["tasks"]["feature-t0"]["workflowInstance"]
+        attempt = inst["attempts"][-1]
+        self.assertEqual((attempt["status"], attempt["evidence"]["reason"]), ("EXECUTION_FAILED", reason))
+        self.assertEqual((inst["position"], inst["condition"]), ("N-DEF-REVIEWER", states.RECOVERY_REQUIRED))
+        reservation = inst["reservations"]["review:feature-t0:r1"]
+        self.assertEqual((reservation["status"], reservation["settlement"]["executionFact"]),
+                         ("settled", dict(kind="refused-before-release", executionId="review:feature-t0:r1",
+                                          failureCode="request-unrouteable")))
+        descriptor = state["executionDescriptors"]["review:feature-t0:r1"]
+        self.assertEqual(descriptor["status"], "settled")
+        self.assertEqual(state["operations"][op["operationId"]]["value"]["status"], "failed")
+
     def test_restart_queries_an_unsettled_review_and_never_executes_it_again(self):
         """AC-09: a Runtime killed mid-review restarts and only queries the same request."""
         self.fixture(definition_review=True)

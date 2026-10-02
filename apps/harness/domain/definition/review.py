@@ -109,11 +109,16 @@ def accept_verdict(outcome, round_record, candidate):
 
 
 def failure_of(outcome):
-    """Map a non-verdict outcome to (attempt status, reason); never to a business FAIL."""
+    """Map a non-verdict outcome to (attempt status, reason); never to a business FAIL.
+
+    The channel's own failure text (`problems`, e.g. a refusal before any attempt) stays in the reason, so the
+    round record says why, not only that it failed."""
     classification = outcome.get("classification")
+    problems = outcome.get("problems")
+    detail = dict(problems=[str(p) for p in problems]) if isinstance(problems, list) and problems else {}
     if classification == UNKNOWN:
-        return "INDETERMINATE", dict(classification=UNKNOWN, failureCode=outcome.get("failureCode"))
+        return "INDETERMINATE", dict(classification=UNKNOWN, failureCode=outcome.get("failureCode"), **detail)
     if classification in FAILED:
-        return "EXECUTION_FAILED", dict(classification=classification, failureCode=outcome.get("failureCode"))
+        return "EXECUTION_FAILED", dict(classification=classification, failureCode=outcome.get("failureCode"), **detail)
     return "EXECUTION_FAILED", dict(classification=classification or "missing", failureCode=outcome.get("failureCode"),
-                                    note="unrecognised channel classification treated as execution failure")
+                                    note="unrecognised channel classification treated as execution failure", **detail)

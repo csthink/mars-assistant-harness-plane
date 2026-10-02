@@ -140,10 +140,23 @@ async def channel_review_runner(descriptor, env, port, binding, registration, ma
     code = await bridge.review("review", options)
     outcome = read_published(worktree, request)
     if outcome is None:
-        return dict(classification="unknown", failureCode="channel-result-not-read", runnerCode=code,
-                    reports=bridge.reports[-3:])
+        return unread_outcome(bridge, code)
     outcome["runnerCode"] = code
     return outcome
+
+
+def unread_outcome(bridge, code):
+    """The outcome when no published round can be read back.
+
+    A refusal before the channel allocated an attempt (bridge.refusal) is a determinate preflight failure that
+    carries the channel's failure code and text: no attempt, Receipt, port reservation or Host request exists.
+    Anything else stays unknown and keeps the channel's last reports and diagnostics with the outcome."""
+    refusal = bridge.refusal()
+    if refusal is not None:
+        return dict(classification="preflight_failed", failureCode=refusal["code"], problems=refusal["problems"],
+                    runnerCode=code)
+    return dict(classification="unknown", failureCode="channel-result-not-read", runnerCode=code,
+                reports=bridge.reports[-3:], diagnostics=bridge.diagnostics[-3:])
 
 
 def policy_context(descriptor):

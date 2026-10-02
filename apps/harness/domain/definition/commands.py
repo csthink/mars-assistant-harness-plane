@@ -354,9 +354,13 @@ def settle_review(state, topology, descriptor, outcome):
         progression.settle_attempt(state, topology, task_id, dict(attemptId=round_record["attemptId"], status=status,
                                                                   evidence=dict(evidence, reason=reason), commandId=base),
                                    revision=state["revision"])
-        if status == "EXECUTION_FAILED" and outcome.get("receiptRef"):
+        if status == "EXECUTION_FAILED" and (outcome.get("receiptRef") or outcome.get("classification") == "preflight_failed"):
+            # The execution fact that settles the reservation: the Receipt, or the refusal before any release
+            # (the same rule as Validate Change; a preflight failure without a Receipt never reached the port).
+            fact = outcome.get("receiptRef") or dict(kind="refused-before-release", executionId=descriptor["executionId"],
+                                                     failureCode=outcome.get("failureCode"))
             reservations.settle(state, topology, task_id, dict(reservationId=round_record["reservationId"], settlement=dict(
-                executionFact=outcome["receiptRef"], attemptId=round_record["attemptId"])), revision=state["revision"])
+                executionFact=fact, attemptId=round_record["attemptId"])), revision=state["revision"])
         if inst["condition"] != states.RECOVERY_REQUIRED:
             _condition(state, topology, task_id, base + ":recovery", states.RECOVERY_REQUIRED, authority)
         round_record.update(status="execution-failed" if status == "EXECUTION_FAILED" else "indeterminate",

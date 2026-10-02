@@ -286,6 +286,21 @@ class ValidateChangeLoop(ValidationCase):
                 fx.restart()
         self.assertEqual({r["round"] for r in fx.rounds()}, {"r1"})
 
+    def test_channel_refusal_before_attempt_keeps_its_reason(self):
+        """A channel refusal before any attempt settles the round as an execution failure that keeps the channel's code and text, and releases the reservation as refused before release."""
+        fx = self.fixture()
+        fx.validate("configure", "c1")
+        fx.validate("formal-authorize", "f0", maxCalls=1)
+        out = fx.validate("dispatch", "p0")
+        refused = dict(classification="preflight_failed", failureCode="request-unrouteable",
+                       problems=["task_record present but malformed"], runnerCode=1)
+        fx.run_reviews(VF.SyntheticImplReviewer(lambda _round: dict(refused)))
+        self.failed(fx, "preflight_failed")
+        self.assertEqual(fx.rounds()[-1]["failure"], dict(status="EXECUTION_FAILED", classification="preflight_failed",
+                                                          failureCode="request-unrouteable",
+                                                          problems=["task_record present but malformed"]))
+        self.assertEqual(fx.inst()["reservations"][out["executionId"]]["status"], "settled")
+
     @instance_area.needed
     def test_unknown_and_stop_unconfirmed_keep_the_reservation_and_only_query(self):
         """AC-08: unknown and the J-06 stop-unconfirmed projection are INDETERMINATE; reservation held; nothing is dispatched again."""
