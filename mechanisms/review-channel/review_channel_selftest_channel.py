@@ -744,7 +744,7 @@ def two_round_cap(e):
     reg = json.loads(base.read_bytes(env.registry))
     e.check(reg["defaults"]["max_rounds"] == 2, "fixture registry default max_rounds = 2")
     live = json.loads(base.read_bytes(os.path.join(e.repo_root, "mechanisms/review-channel/review_channel_registry.json")))
-    e.check(live["defaults"]["max_rounds"] == 2 and live["registry_revision"] == 7, "live Registry: defaults.max_rounds 2, registry_revision 7")
+    e.check(live["defaults"]["max_rounds"] == 2 and live["registry_revision"] == 8, "live Registry: defaults.max_rounds 2, registry_revision 8")
     code, out, err, j = env.run("review", env.repo.request("r1"))
     e.check(code == 0 and j["verdict"] == "FAIL", "r1 FAIL published: %s" % err[-300:])
     env.repo.commit("r1")
