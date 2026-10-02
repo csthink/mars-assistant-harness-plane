@@ -1,6 +1,6 @@
 {
   "registry_schema": "review-channel-registry/v5",
-  "registry_revision": 7,
+  "registry_revision": 8,
   "defaults": {
     "max_rounds": 2,
     "timeout_seconds": 3600,
@@ -123,7 +123,7 @@
       "profile": {
         "id": "review/codex-native-readonly",
         "version": "1",
-        "digest": "8061614dbefcbb03bab19bb15b2c23a1427d4555ffadd06ea859bed8b83a5d63",
+        "digest": "c30bd24676b535c1e1422a58c686a2edb7a4a7719fcd9b912119f161744792ce",
         "trustModel": "current-user",
         "purpose": "review",
         "programIdentity": {
@@ -132,7 +132,7 @@
           "version": "0.155.1"
         },
         "nativeApprovalPolicy": "expected-range-gate",
-        "configurationDigest": "8061614dbefcbb03bab19bb15b2c23a1427d4555ffadd06ea859bed8b83a5d63",
+        "configurationDigest": "c30bd24676b535c1e1422a58c686a2edb7a4a7719fcd9b912119f161744792ce",
         "capabilities": [
           "read-only",
           "native-approval",
@@ -163,7 +163,7 @@
         "executionPort": "embedded",
         "purpose": "review",
         "trustModel": "current-user",
-        "profileDigest": "8061614dbefcbb03bab19bb15b2c23a1427d4555ffadd06ea859bed8b83a5d63",
+        "profileDigest": "c30bd24676b535c1e1422a58c686a2edb7a4a7719fcd9b912119f161744792ce",
         "configurationRevision": "0",
         "credentialRevision": "1"
       },

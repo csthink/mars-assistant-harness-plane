@@ -664,7 +664,7 @@ Registry 增加外部执行端口的明确登记：端口身份、运行模式 e
 
 模型厂商由 hp 的 VENDORS 所有者维护登记映射，未知模型或集合拒绝。映射核对实际 `actualBinding.model` 与已登记提供方，不以 caller自报或路由名代替；例如 `claude-opus-5[1m]` 的实际模型后缀与 Contract 引用 `claude-opus-5:1m` 是两种身份表示，按登记关系匹配，不凭字符串去掉后缀猜模型。Reviewer 厂商必须不在完整作者集合中。
 
-J-04 Assistant输入固定为 `host-execution-facts-j06.md` r2 附录A：端口 embedded；Implementer profile `coding-implementer/claude-print-restricted` v1，digest `2c9583da0f4101cc04e86251d85ba15c3a2bc9d6fda024f8d79081566744f16c`、purpose coding-implementer、approval auto-deny；Reviewer `review/codex-native-readonly` v1，digest `8061614dbefcbb03bab19bb15b2c23a1427d4555ffadd06ea859bed8b83a5d63`、purpose review、approval expected-range-gate。旧 Implementer `5bb50653…` 不可登记；programIdentity 每次重新发现实际安装，不写版本允许列表，不因版本变化永久禁止兼容组合；变化后重核受影响资格证据。profile信任边界、用途、执行端与批准事实随 Receipt 保存，秘密不进入领域。
+J-04 Assistant输入固定为 `host-execution-facts-j06.md` r2 附录A：端口 embedded；Implementer profile `coding-implementer/claude-print-restricted` v1，digest `2c9583da0f4101cc04e86251d85ba15c3a2bc9d6fda024f8d79081566744f16c`、purpose coding-implementer、approval auto-deny；Reviewer `review/codex-native-readonly` v1，digest `c30bd24676b535c1e1422a58c686a2edb7a4a7719fcd9b912119f161744792ce`、purpose review、approval expected-range-gate；该 Reviewer 策略在附录 A 策略字节之外只多受限设置 `skills.include_instructions = false`（Codex 0.159 起即使跳过主机技能发现，仍把每个可发现技能的名称、描述与路径写进模型指令，该设置把技能清单留在请求之外），id 与 version 不变。旧 Implementer `5bb50653…` 与旧 Reviewer `8061614d…` 不可登记；programIdentity 每次重新发现实际安装，不写版本允许列表，不因版本变化永久禁止兼容组合；变化后重核受影响资格证据。profile信任边界、用途、执行端与批准事实随 Receipt 保存，秘密不进入领域。
 
 round lock 只防同轮的并发通道操作；取锁到原件/Receipt结算均由显式上下文负责，正常、异常和取消在 finally 释放，inode不删除不替换。进程死亡自然释放 round lock 不解除领域writer锁语义或物理预约；Agent仍活着/状态未知时，不得以重新取得round lock为由重复调用。Standalone LocalExecutionPort 与 embedded 同样核对物理退出证据。
 
