@@ -19,11 +19,18 @@ from runtime.protocol import Schemas
 from runtime.transport import Stdio
 
 
+# The outcome the production runner gives when the channel refuses before allocating an attempt
+# (domain.definition.dispatch.unread_outcome); HP_T3_VERDICT=REFUSED selects it.
+REFUSED = dict(classification="preflight_failed", failureCode="request-unrouteable",
+               problems=["task_record present but malformed"], runnerCode=1)
+
+
 class GatedReviewer(F.SyntheticReviewer):
     """Waits for a gate file before answering; logs every execution start to a file (process-crossing)."""
 
     def __init__(self, gate, log, verdict):
-        super().__init__(("valid", verdict), mode="authority")
+        self.refused = verdict == "REFUSED"
+        super().__init__(("valid", "PASS" if self.refused else verdict), mode="authority")
         self.gate_file, self.log = Path(gate) if gate else None, Path(log)
 
     async def __call__(self, descriptor, env, port, binding, registration, mapping):
@@ -32,6 +39,8 @@ class GatedReviewer(F.SyntheticReviewer):
         if self.gate_file is not None:
             while not self.gate_file.exists():
                 await asyncio.sleep(0.05)
+        if self.refused:
+            return dict(REFUSED)
         return await super().__call__(descriptor, env, port, binding, registration, mapping)
 
     async def query(self, descriptor, env):

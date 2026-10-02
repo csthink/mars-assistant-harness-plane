@@ -125,7 +125,7 @@ async def channel_change_review_runner(descriptor, env, port, binding, registrat
     import review_channel as C
     import review_evidence as E
     from execution.bridge import ProductReview
-    from domain.definition.dispatch import read_published
+    from domain.definition.dispatch import read_published, unread_outcome
     document_path, reference_paths = materials.materialize(worktree, descriptor["taskId"], round_record["round"], built)
     request = request_document(env.domain.read(), descriptor, round_record, document_path, reference_paths)
     if E.storage_mode(str(worktree)) != "legacy-git":
@@ -139,8 +139,7 @@ async def channel_change_review_runner(descriptor, env, port, binding, registrat
     code = await bridge.review("review", options)
     outcome = read_published(worktree, request, stage=STAGE)
     if outcome is None:
-        return dict(classification="unknown", failureCode="channel-result-not-read", runnerCode=code,
-                    reports=bridge.reports[-3:])
+        return unread_outcome(bridge, code)
     outcome["runnerCode"] = code
     return outcome
 

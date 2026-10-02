@@ -158,6 +158,23 @@ class ProductReview:
             if worker.done():self.loop=None
             else:worker.add_done_callback(lambda _:setattr(self,'loop',None))
 
+    def refusal(self):
+        """The channel's refusal before it allocated an attempt, or None.
+
+        Before allocation the channel reports a request-unrouteable diagnostic or a REJECTED report without an
+        attempt_id (review channel design §6.1); neither leaves an attempt, a Receipt or a port reservation, so
+        no Host request exists. Any port reservation makes the outcome something other than such a refusal."""
+        if self.reservations:return None
+        for report in self.reports:
+            if (isinstance(report,dict) and report.get('state')=='REJECTED' and 'attempt_id' not in report
+                    and isinstance(report.get('failure_code'),str) and report['failure_code']):
+                return dict(code=report['failure_code'],problems=[str(p) for p in report.get('problems') or []])
+        prefix='request-unrouteable: '
+        for line in self.diagnostics:
+            if isinstance(line,str) and line.startswith(prefix):
+                return dict(code='request-unrouteable',problems=[line[len(prefix):]])
+        return None
+
     async def cancel(self,call_index):
         require(call_index in self.reservations,'execution-port-result-unknown')
         return await self.port.cancel(self.reservations[call_index])
