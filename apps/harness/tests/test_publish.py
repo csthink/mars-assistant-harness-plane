@@ -241,10 +241,14 @@ class PublishCase(unittest.TestCase):
 
     # -- AC-02 --------------------------------------------------------------------------------------
     def test_push_and_pull_request_are_created_and_read_back(self):
-        """AC-02: one non-forced ref pushed, one pull request with the bound title, body and operation trailer, then Published."""
+        """AC-02: one non-forced ref pushed, one pull request with the bound title, body and operation trailer, then Published.
+
+        The product line's branches, tags and remote-tracking refs stay as they were: `origin` carries the default
+        fetch refspec, so a push that let Git update a remote-tracking ref would add refs/remotes/origin/<branch>.
+        """
         fx = self.fixture()
         fx.to_gate()
-        local_before = git(fx.repo, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads", "refs/tags")
+        local_before = fx.refs()[1]
         fx.publish()
         inst = fx.inst()
         self.assertEqual((inst["lifecycle"], inst["condition"]), (states.COMPLETED, states.RESULT_RECORDED))
