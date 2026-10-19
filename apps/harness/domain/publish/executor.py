@@ -29,6 +29,13 @@ from domain.workflow.results import WorkflowRejection
 
 PUSH_TIMEOUT = 300
 LS_REMOTE_TIMEOUT = 60
+# Git 2.56 and later, when a push names a URL, update a remote-tracking ref through the fetch refspec of the one
+# configured remote whose push URL equals that URL; earlier Git never updates remote-tracking refs for a URL push.
+# The verified address is the push URL of the configured remote, so that remote always matches. Two remotes that
+# exist only on this one git command line and carry the same URL make the match non-unique, Git keeps the URL's own
+# unconfigured remote, which has no fetch refspec, and no remote-tracking ref changes. The push destination, the
+# refspec and the arguments a pre-push hook receives stay those of the plain URL push.
+UNTRACKED_PUSH_REMOTES = ("harness-publish-untracked-1", "harness-publish-untracked-2")
 
 
 class Stop(Exception):
@@ -47,6 +54,12 @@ def _ls_remote(repository, address, branch):
     lines = [l.split("\t") for l in result.stdout.decode().splitlines() if l.strip()]
     values = [l[0] for l in lines if len(l) == 2 and l[1] == "refs/heads/" + branch]
     return (values[0] if values else None), True
+
+
+def _push_arguments(address, candidate, branch):
+    """`git push <address> <candidate>:refs/heads/<branch>` that leaves every remote-tracking ref unchanged."""
+    scoped = [part for name in UNTRACKED_PUSH_REMOTES for part in ("-c", "remote.%s.url=%s" % (name, address))]
+    return (*scoped, "push", address, "%s:refs/heads/%s" % (candidate, branch))
 
 
 def _summary(pull):
@@ -123,8 +136,7 @@ def perform(repository, binding, operation, platform):
             evidence["push"] = dict(attempted=True)
             pushed, timed_out = None, False
             try:
-                pushed = publish_binding.git(repository, "push", raw, "%s:refs/heads/%s" % (candidate, branch),
-                                             timeout=PUSH_TIMEOUT)
+                pushed = publish_binding.git(repository, *_push_arguments(raw, candidate, branch), timeout=PUSH_TIMEOUT)
                 evidence["push"].update(returncode=pushed.returncode, timedOut=False)
             except publish_binding.GitFailed:
                 timed_out = True
