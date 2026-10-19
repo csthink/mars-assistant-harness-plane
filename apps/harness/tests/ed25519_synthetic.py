@@ -1,4 +1,12 @@
-"""SYNTHETIC Ed25519 for tests only (RFC 8032 section 5.1 arithmetic, pure Python, slow but exact).
+"""SYNTHETIC Ed25519 for tests only (pure Python, slow but exact).
+
+The arithmetic is a Python 3 port of the public-domain Python implementation published by the Ed25519 authors:
+ed25519.py ("the main subroutines") from https://ed25519.cr.yp.to/software.html, whose Copyrights section states
+"The Ed25519 software is in the public domain." The signature scheme is Ed25519 as specified in RFC 8032
+section 5.1. Changes from that implementation: Python 3 bytes and integer division; built-in modular
+exponentiation; int.from_bytes and int.to_bytes for the little-endian encodings; the verification scalar is
+reduced modulo l as RFC 8032 section 5.1.7 specifies; and verification returns False instead of raising, also
+rejecting non-canonical point encodings and an S that is not below l.
 
 Keys are generated in process memory from os.urandom and are never written to disk, printed or passed
 as arguments. The real development publisher key is never used by tests (Owner ruling feature-t18:OD-02).
@@ -9,92 +17,118 @@ import base64
 import hashlib
 import os
 
-P = 2 ** 255 - 19
-L = 2 ** 252 + 27742317777372353535851937790883648493
-D = -121665 * pow(121666, P - 2, P) % P
-SQRT_M1 = pow(2, (P - 1) // 4, P)
+BITS = 256
+FIELD = 2 ** 255 - 19
+ORDER = 2 ** 252 + 27742317777372353535851937790883648493
 SPKI_PREFIX = bytes.fromhex("302a300506032b6570032100")
 # The PKCS#8 prefix of an Ed25519 private key, split so that no source file carries it contiguously (key scans).
 PKCS8_PREFIX = bytes.fromhex("302e0201" "00300506" "032b6570" "04220420")
 
 
-def _sha512(data):
-    return hashlib.sha512(data).digest()
+def _hash(message):
+    return hashlib.sha512(message).digest()
 
 
-def _add(a, b):
-    x1, y1, z1, t1 = a
-    x2, y2, z2, t2 = b
-    aa = (y1 - x1) * (y2 - x2) % P
-    bb = (y1 + x1) * (y2 + x2) % P
-    cc = t1 * 2 * D * t2 % P
-    dd = z1 * 2 * z2 % P
-    e, f, g, h = bb - aa, dd - cc, dd + cc, bb + aa
-    return (e * f % P, g * h % P, f * g % P, e * h % P)
+def _inv(x):
+    return pow(x, FIELD - 2, FIELD)
 
 
-def _mul(s, point):
-    q = (0, 1, 1, 0)
-    while s > 0:
-        if s & 1:
-            q = _add(q, point)
-        point = _add(point, point)
-        s >>= 1
-    return q
+CURVE_D = -121665 * _inv(121666)
+SQRT_M1 = pow(2, (FIELD - 1) // 4, FIELD)
 
 
-def _equal(a, b):
-    x1, y1, z1, _ = a
-    x2, y2, z2, _ = b
-    return (x1 * z2 - x2 * z1) % P == 0 and (y1 * z2 - y2 * z1) % P == 0
-
-
-def _recover_x(y, sign):
-    if y >= P:
-        return None
-    x2 = (y * y - 1) * pow(D * y * y + 1, P - 2, P)
-    if x2 == 0:
-        return None if sign else 0
-    x = pow(x2, (P + 3) // 8, P)
-    if (x * x - x2) % P != 0:
-        x = x * SQRT_M1 % P
-    if (x * x - x2) % P != 0:
-        return None
-    if (x & 1) != sign:
-        x = P - x
+def _xrecover(y):
+    xx = (y * y - 1) * _inv(CURVE_D * y * y + 1)
+    x = pow(xx, (FIELD + 3) // 8, FIELD)
+    if (x * x - xx) % FIELD != 0:
+        x = (x * SQRT_M1) % FIELD
+    if x % 2 != 0:
+        x = FIELD - x
     return x
 
 
-GY = 4 * pow(5, P - 2, P) % P
-GX = _recover_x(GY, 0)
-G = (GX, GY, 1, GX * GY % P)
+BASE_Y = 4 * _inv(5)
+BASE_X = _xrecover(BASE_Y)
+BASE = (BASE_X % FIELD, BASE_Y % FIELD)
 
 
-def _compress(point):
-    x, y, z, _ = point
-    zinv = pow(z, P - 2, P)
-    x, y = x * zinv % P, y * zinv % P
-    return int.to_bytes(y | ((x & 1) << 255), 32, "little")
+def _edwards(p, q):
+    x1, y1 = p
+    x2, y2 = q
+    x3 = (x1 * y2 + x2 * y1) * _inv(1 + CURVE_D * x1 * x2 * y1 * y2)
+    y3 = (y1 * y2 + x1 * x2) * _inv(1 - CURVE_D * x1 * x2 * y1 * y2)
+    return (x3 % FIELD, y3 % FIELD)
 
 
-def _decompress(data):
-    if len(data) != 32:
+def _scalarmult(p, e):
+    if e == 0:
+        return (0, 1)
+    q = _scalarmult(p, e // 2)
+    q = _edwards(q, q)
+    if e & 1:
+        q = _edwards(q, p)
+    return q
+
+
+def _encodeint(y):
+    return y.to_bytes(BITS // 8, "little")
+
+
+def _encodepoint(p):
+    x, y = p
+    return (y | ((x & 1) << (BITS - 1))).to_bytes(BITS // 8, "little")
+
+
+def _bit(h, i):
+    return (h[i // 8] >> (i % 8)) & 1
+
+
+def _secret_scalar(h):
+    return 2 ** (BITS - 2) + sum(2 ** i * _bit(h, i) for i in range(3, BITS - 2))
+
+
+def _hint(message):
+    return int.from_bytes(_hash(message), "little")
+
+
+def _publickey(secret):
+    return _encodepoint(_scalarmult(BASE, _secret_scalar(_hash(secret))))
+
+
+def _signature(message, secret, public):
+    h = _hash(secret)
+    a = _secret_scalar(h)
+    r = _hint(h[BITS // 8:BITS // 4] + message)
+    encoded_r = _encodepoint(_scalarmult(BASE, r))
+    s = (r + _hint(encoded_r + public + message) * a) % ORDER
+    return encoded_r + _encodeint(s)
+
+
+def _isoncurve(p):
+    x, y = p
+    return (-x * x + y * y - 1 - CURVE_D * x * x * y * y) % FIELD == 0
+
+
+def _decodeint(data):
+    return int.from_bytes(data, "little")
+
+
+def _decodepoint(data):
+    if len(data) != BITS // 8:
         return None
-    y = int.from_bytes(data, "little")
-    sign = y >> 255
-    y &= (1 << 255) - 1
-    x = _recover_x(y, sign)
-    if x is None:
+    y = _decodeint(data) & ((1 << (BITS - 1)) - 1)
+    sign = _bit(data, BITS - 1)
+    if y >= FIELD:
         return None
-    return (x, y, 1, x * y % P)
-
-
-def _expand(secret):
-    digest = _sha512(secret)
-    a = int.from_bytes(digest[:32], "little")
-    a &= (1 << 254) - 8
-    a |= 1 << 254
-    return a, digest[32:]
+    x = _xrecover(y)
+    if x == 0 and sign:
+        return None
+    if x & 1 != sign:
+        x = FIELD - x
+    point = (x, y)
+    if not _isoncurve(point):
+        return None
+    return point
 
 
 class SyntheticKey:
@@ -105,18 +139,12 @@ class SyntheticKey:
 
     def __init__(self, seed=None):
         self._seed = seed if seed is not None else os.urandom(32)
-        a, _ = _expand(self._seed)
-        self.public = _compress(_mul(a, G))
+        self.public = _publickey(self._seed)
         der = SPKI_PREFIX + self.public
         self.public_pem = ("-----BEGIN PUBLIC KEY-----\n" + base64.b64encode(der).decode() + "\n-----END PUBLIC KEY-----\n").encode()
 
     def sign(self, message):
-        a, prefix = _expand(self._seed)
-        r = int.from_bytes(_sha512(prefix + message), "little") % L
-        big_r = _compress(_mul(r, G))
-        h = int.from_bytes(_sha512(big_r + self.public + message), "little") % L
-        s = (r + h * a) % L
-        return big_r + int.to_bytes(s, 32, "little")
+        return _signature(message, self._seed, self.public)
 
     def __repr__(self):
         return "SyntheticKey(public=%s)" % self.public.hex()
@@ -132,12 +160,12 @@ def public_from_pem(pem):
 
 
 def verify(public, message, signature):
-    if len(signature) != 64:
+    if len(signature) != BITS // 4:
         return False
-    point_a = _decompress(public)
-    point_r = _decompress(signature[:32])
-    s = int.from_bytes(signature[32:], "little")
-    if point_a is None or point_r is None or s >= L:
+    point_a = _decodepoint(public)
+    point_r = _decodepoint(signature[:BITS // 8])
+    s = _decodeint(signature[BITS // 8:])
+    if point_a is None or point_r is None or s >= ORDER:
         return False
-    h = int.from_bytes(_sha512(signature[:32] + public + message), "little") % L
-    return _equal(_mul(s, G), _add(point_r, _mul(h, point_a)))
+    h = _hint(signature[:BITS // 8] + public + message) % ORDER
+    return _scalarmult(BASE, s) == _edwards(point_r, _scalarmult(point_a, h))
