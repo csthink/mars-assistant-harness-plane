@@ -26,6 +26,7 @@ class SchemaCases(unittest.TestCase):
                 Schemas({"urn:test:root":{"$id":"urn:test:root","$ref":ref}})
 
     def test_canonical_digest_not_raw_bytes(self):
+        self.fail("deliberate failure probe")
         one={"context":{"connectionId":"first"},"operationId":"op:one","payload":{"z":1,"a":"é"},"requestDigest":"ignored"}
         two={"payload":{"a":"é","z":1.0},"operationId":"op:one","context":{"connectionId":"second"}}
         self.assertEqual(digest("runtime.action.invoke",one),digest("runtime.action.invoke",two))
