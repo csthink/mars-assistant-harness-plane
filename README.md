@@ -22,6 +22,7 @@ hp 可以经 Runtime Contract 0.1.0 被图形客户端连接，Assistant 的 mac
 | `tools/` | 公开仓安全检查 `check-public-safety-generic.sh` 与 pre-commit hook 安装器 `install-hooks.sh` |
 | `docs/architecture.md` | 架构说明：组件、依赖方向、状态与持久化、设计取舍 |
 | `CONTRIBUTING.md` | 参与本仓开发：约束、本地检查、提交前扫描、改动检查清单 |
+| `LICENSE`、`NOTICE` | Apache License 2.0 全文与本仓的版权声明 |
 
 ## 环境
 
@@ -141,4 +142,4 @@ runner 镜像的 macOS 低于 bundle 的 `minimumOs` 时，产品测试与符合
 
 ## 许可
 
-本仓暂未授予开源许可，不附 `LICENSE` 文件。源码公开可读；在另行声明之前，不授予复制、修改或再分发的许可。
+本仓以 [Apache License 2.0](LICENSE) 授权，版权声明见 [`NOTICE`](NOTICE)。按该许可第 4 条，再分发本仓或其衍生作品时须附带 `LICENSE` 全文，并保留 `NOTICE` 中的声明。
