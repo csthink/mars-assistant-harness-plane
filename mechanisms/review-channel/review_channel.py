@@ -8,7 +8,9 @@
 选项：--no-reemit（关闭补发，记入 Receipt）
       --repo-root <路径>（默认从可执行物位置向上解析）
 `register` 子命令及其开关自减重第 3 步退役（设计 §8.4，Amendment 4）：发布之后通道不执行任何 Git 动作。
-      无注入口：Registry 与适配器集恒取自 --repo-root 所指仓根的 mechanisms/review-channel/，配置正本恒取自当前 HOME 的 ~/.zshrc（自测以隔离仓 + 隔离 HOME 实撞）
+      无注入口：Registry 与适配器集恒取自 --repo-root 所指仓根的 mechanisms/review-channel/，key 恒取自密钥目录
+      （$XDG_CONFIG_HOME/mars-assistant，未设置时 $HOME/.config/mars-assistant）内 Registry 声明的密钥文件，
+      base 配置正本恒取自当前 HOME 的 ~/.zshrc（自测以隔离仓 + 隔离 HOME 实撞）
 
 通道不是门：退出码 0 / 1 / 2 的含义与净化启动由本通道设计 §5.3 定义，判词 PASS / FAIL 另由 Receipt 承载。
 """
@@ -113,7 +115,8 @@ class Options:
         self.reemit = True
         self.execution_context = None  # trusted product injection only; no CLI/JSON switch
 
-    # 派生路径（不可由命令行替换，R10-B1 整改）：Registry 与适配器集 = 被审仓根内受治理的单元文件；配置正本 = 当前 HOME 的 ~/.zshrc
+    # 派生路径（不可由命令行替换，R10-B1 整改）：Registry 与适配器集 = 被审仓根内受治理的单元文件；配置正本 = 当前 HOME 的 ~/.zshrc；
+    # 密钥目录 = 当前进程环境的 XDG_CONFIG_HOME 或 HOME 下的 mars-assistant（§7.5）
     @property
     def registry(self):
         return os.path.join(self.repo_root, REGISTRY_REL)
@@ -125,6 +128,10 @@ class Options:
     @property
     def zshrc(self):
         return S.ZSHRC_PATH
+
+    @property
+    def key_dir(self):
+        return S.key_directory()
 
 
 def parse_args(argv):
@@ -601,7 +608,7 @@ class Preflight:
             if code is not None:
                 raise base.PreflightError(code,"capability status %s under mode %s" % (status,self.mode))
             self.capability_status=status
-            self.env_report=S.resolve_for_provider(prov,self.secrets,self.opts.zshrc)
+            self.env_report=S.resolve_for_provider(prov,self.secrets,self.opts.zshrc,self.opts.key_dir)
         _OUTPUT_SCRUB.scan = self.secrets.scan_set   # R11-B1：秘密一经解析即启用输出清洗，先于适配器 preflight 与任何后续异常
         # R18-B1 / R19-B1（Owner 甲案，gov-t8:OD-11 / RES-6）：与治理工件结构字节重叠的秘密值不可受脱敏保护——先从扫描集移除
         # （其字面本就是公开记号），再以 preflight 失败结束；不显示值、长度或前后缀。碰撞面 = 固定 schema 成员名 ∪ 此刻已知的
@@ -1037,7 +1044,7 @@ def run_attempt(mode, opts):
     # R7-B1 / R8-B2（gov-t8:OD-09 乙案）：分配之前以 Registry 全体 provider 的秘密并集预扫描原始 Request——命中则 attempt
     # 在分配后立即以 secret-in-input 结束（不进入完整校验、不到达适配器与 argv）；request.json 仍为原始字节 exact copy
     # （§8.1 审计与 request_sha256 复核），调用方自带秘密的原字节留在 attempt 目录属 Owner 接受残留 RES-4
-    pre_scan = opts.execution_context.scan_set() if getattr(opts,"execution_context",None) else S.union_scan_set(opts.registry, opts.zshrc)
+    pre_scan = opts.execution_context.scan_set() if getattr(opts,"execution_context",None) else S.union_scan_set(opts.registry, opts.zshrc, opts.key_dir)
     request_hit = base.contains_secret(raw, pre_scan)
     attempt = Attempt(repo_root, routing, mode, raw, opts)
     try:

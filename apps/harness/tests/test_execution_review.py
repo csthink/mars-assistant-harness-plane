@@ -67,7 +67,7 @@ class ReviewCases(unittest.IsolatedAsyncioTestCase):
         if not os.environ.get('HP_EXECUTION_TEST_OUTPUT'):self.engine.cleanup()
         EP.HostExecutionCases.tearDown(self)
     def install_registry(self):
-        p=Path(self.env.registry);reg=json.loads(p.read_text());reg.update(registry_schema='review-channel-registry/v5',execution_ports=[self.registration],model_mappings=[self.mapping]);p.write_text(json.dumps(reg))
+        p=Path(self.env.registry);reg=json.loads(p.read_text());reg.update(registry_schema='review-channel-registry/v6',execution_ports=[self.registration],model_mappings=[self.mapping]);p.write_text(json.dumps(reg))
         self.repo.commit('synthetic product registration only')
     def configure_archive(self):
         primary=Path(self.engine.tmp_root)/'primary';backup=Path(self.engine.tmp_root)/'backup';primary.mkdir();backup.mkdir()

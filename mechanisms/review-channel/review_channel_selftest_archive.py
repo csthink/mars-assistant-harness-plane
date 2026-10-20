@@ -354,7 +354,8 @@ class ArchiveTests(unittest.TestCase):
         receipt = json.loads(rb)
         ep = receipt["effective_profile"]
         registry = json.loads(Path(self.env.registry).read_bytes())
-        registry["registry_schema"] = "review-channel-registry/v4"
+        # 现行 Registry（v5 起的混合形态）以 evidence 对象承载 archive 能力凭据；v4 的读取由 registry.schema-constraints 覆盖。
+        # 不再改写为 v4：v6 之前的版本不认识 key_file，通道无法为样本 provider 取得 key（§7.5）
         cap = registry["providers"][ep["route_provider"]]["models"][
             ep["requested_model"]
         ]["capability"]

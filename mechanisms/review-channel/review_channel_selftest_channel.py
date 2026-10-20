@@ -9,6 +9,7 @@ import time
 import review_channel_base as base
 import review_channel_contract as C
 import review_channel_receipt as RC
+import review_channel_secrets as S
 import review_channel_verdict as V
 
 
@@ -119,6 +120,39 @@ def probe_and_preflight(e):
     code, out, err, j = env.run("review", env.repo.request("r1", inputs={"candidates": ["mechanisms/demo/linked.md"], "references": []}))
     e.check(code == 1 and j["failure_code"] == "candidate-unreadable" and "ghost" not in err, "symlinked candidate refused before any reference resolution (R3-B1)")
     os.unlink(env.repo.path("mechanisms/demo/linked.md"))
+
+
+def key_file_source(e):
+    """§7.5 子进程实撞：key 只来自 HOME 下密钥目录内 Registry 声明的密钥文件；~/.zshrc 中同名 export 不被采用；
+    拒绝态在 preflight 以固定失败码结束，stdout / stderr 不含值与目录路径；恢复后照常 PASS。"""
+    env = Env(e)
+    kd = e.home_key_dir()
+    key_path = os.path.join(kd, "fake.key")
+    code, out, err, j = env.run("preflight", env.repo.request("r1"))
+    e.check(code == 0 and j["state"] == "PASS", "preflight PASS with the key file: %s" % err[-300:])
+    e.check(j.get("environment") in (None, dict(zip(("FAKE_API_KEY", "FAKE_API_BASE"), (S.KEY_FILE_REPORT_STATE, "detected_literal")))),
+            "environment report carries state words only: %s" % j.get("environment"))
+    e.check("sk-fake-secret-value-123" not in out + err, "preflight output never carries the key")
+    os.remove(key_path)
+    e.fake_zshrc("export FAKE_API_KEY=sk-zshrc-must-not-be-used\nexport FAKE_API_BASE='https://fake.invalid/v1'\n", path_dir=e.tmp_root, name=".zshrc")
+    code, out, err, j = env.run("preflight", env.repo.request("r1"))
+    e.check(code == 1 and j["failure_code"] == "secret-missing" and "Traceback" not in err, "missing key file is secret-missing; ~/.zshrc is no fallback: %s" % j)
+    e.check("sk-zshrc-must-not-be-used" not in out + err and kd not in out + err, "no value and no directory path in the report")
+    e.fake_zshrc(None, path_dir=e.tmp_root, name=".zshrc")
+    for mode, raw, code_expected in ((0o644, None, "secret-file-rejected"), (0o600, b"", "secret-missing"), (0o600, b"a b\n", "secret-file-rejected")):
+        e.fake_key_file(raw, path_dir=kd, mode=mode)
+        code, out, err, j = env.run("preflight", env.repo.request("r1"))
+        e.check(code == 1 and j["failure_code"] == code_expected and "Traceback" not in err
+                and "sk-fake-secret-value-123" not in out + err and kd not in out + err,
+                "key file mode %o / %r is refused as %s without leaking: %s" % (mode, raw, code_expected, j))
+    os.remove(key_path)
+    os.symlink(e.fake_key_file(path_dir=e.tmpdir("key-target")), key_path)
+    code, out, err, j = env.run("preflight", env.repo.request("r1"))
+    e.check(code == 1 and j["failure_code"] == "secret-file-rejected" and "not_regular_file" in out + err, "a symbolic link is not a key file: %s / %s" % (j, err[-300:]))
+    os.remove(key_path)
+    e.fake_key_file(path_dir=kd)
+    code, out, err, j = env.run("preflight", env.repo.request("r1"))
+    e.check(code == 0 and j["state"] == "PASS", "restored key file passes again: %s" % err[-300:])
 
 
 def review_paths(e):
@@ -390,33 +424,34 @@ def failures_and_classification(e):
     attempt_dir = os.path.join(env.repo.path(env.repo.attempts_dir("r1")), j["attempt_id"])
     e.check(b"sk-fake-secret-value-123" not in base.read_bytes(os.path.join(attempt_dir, "reviewer_last_message.md")), "diagnostic redacted")
     # r18 自查整改（R18-B1 线索）：秘密字面与治理工件结构字节重叠（此处 = Receipt 成员名 receipt_schema）→ preflight 拒绝
-    # secret-structural-collision，Receipt 成员名完整在场、无 Traceback；随后恢复默认 zshrc
-    e.fake_zshrc("export FAKE_API_KEY=receipt_schema\nexport FAKE_API_BASE='https://fake.invalid/v1'\n", path_dir=e.tmp_root, name=".zshrc")
+    # secret-structural-collision，Receipt 成员名完整在场、无 Traceback；随后恢复默认密钥文件与 zshrc
+    # （key 来自密钥文件、内容不含空白；含空白的结构字面改经 base 字面量注入，两者同属扫描集）
+    e.fake_key_file("receipt_schema", path_dir=e.home_key_dir())
     code, out, err, j = env.run("review", env.repo.request("r1"))
     rec = [r for _n, r in env.receipts("r1") if r["attempt_id"] == j["attempt_id"]][0]
     e.check(code == 1 and j["failure_code"] == "secret-structural-collision" and rec["receipt_phase"] == "routed"
             and rec["classification"] == "preflight_failed" and rec["receipt_schema"] is not None and "Traceback" not in err
             and set(rec) == set(RC.RECEIPT_KEYS), "secret overlapping structural bytes is refused at preflight; Receipt schema intact: %s" % j)
-    # r18 R18-B1 整改：带引号字面量（单引号 zshrc 值内的 "receipt_schema"）、替换哨兵子串、纯结构流字符值三族同样在 preflight 拒绝
-    for literal, why in (("'\"receipt_schema\"'", "quoted member-name literal"), ("'REDACTED-SECRET'", "substring of the redaction sentinel"),
-                        ("'null, 123'", "quote-free structural-stream characters only"),
-                        ("'q\"q'", "raw quote inside the value (a raw quote can only ever match structural bytes)"),
+    # r18 R18-B1 整改：带引号字面量（密钥文件值 "receipt_schema"）、替换哨兵子串、纯结构流字符值三族同样在 preflight 拒绝
+    for literal, why in (("\"receipt_schema\"", "quoted member-name literal"), ("REDACTED-SECRET", "substring of the redaction sentinel"),
+                        ("null,123", "quote-free structural-stream characters only"),
+                        ("q\"q", "raw quote inside the value (a raw quote can only ever match structural bytes)"),
                         # R19-B1：preflight 可预知的动态成员名——环境变量名键、适配器事实键（fake preflight 返回 recognition）、诊断文件名
                         ("FAKE_API_BASE", "environment-report member name (Registry variable name)"),
                         ("recognition", "adapter preflight fact member name"),
                         ("reviewer_last_message.md", "diagnostics artifact name"),
                         # R20-B1：脱敏算法自身可生成的字节（哨兵#n 的子串）——去重后缀会把秘密写回，preflight 拒绝
-                        ("'#2'", "dedupe suffix literal"), ("'T]#7'", "substring spanning the sentinel tail and a dedupe suffix"),
+                        ("#2", "dedupe suffix literal"), ("T]#7", "substring spanning the sentinel tail and a dedupe suffix"),
                         # R21-B1：连续哨兵的跨界子串与输出层替代文本的子串同属生成字节语言
-                        ("'T][RED'", "substring spanning two adjacent sentinels"), ("REDACTED-OUTPUT", "substring of the output fallback text")):
-        e.fake_zshrc("export FAKE_API_KEY=%s\nexport FAKE_API_BASE='https://fake.invalid/v1'\n" % literal, path_dir=e.tmp_root, name=".zshrc")
+                        ("T][RED", "substring spanning two adjacent sentinels"), ("REDACTED-OUTPUT", "substring of the output fallback text")):
+        e.fake_key_file(literal, path_dir=e.home_key_dir())
         code, out, err, j = env.run("review", env.repo.request("r1"))
         rec = [r for _n, r in env.receipts("r1") if r["attempt_id"] == j["attempt_id"]][0]
         e.check(code == 1 and j["failure_code"] == "secret-structural-collision" and rec["receipt_phase"] == "routed" and "Traceback" not in err
                 and set(rec) == set(RC.RECEIPT_KEYS), "%s is refused at preflight as a structural collision: %s" % (why, j))
     # R19-B1：调用后才出现的动态成员名（提供方应答 usage 键 input_tokens）不可在 preflight 预知——成员名级脱敏兜底：
     # 判词 VALID 路径的发布前终检命中 → secret-leak、INVALID、Receipt 内成员名已脱敏、tracked 未建
-    e.fake_zshrc("export FAKE_API_KEY=input_tokens\nexport FAKE_API_BASE='https://fake.invalid/v1'\n", path_dir=e.tmp_root, name=".zshrc")
+    e.fake_key_file("input_tokens", path_dir=e.home_key_dir())
     env.control(behavior="valid", usage={"input_tokens": 1, "output_tokens": 2})
     code, out, err, j = env.run("review", env.repo.request("r1"))
     rec = [r for _n, r in env.receipts("r1") if r["attempt_id"] == j["attempt_id"]][0]
@@ -430,7 +465,9 @@ def failures_and_classification(e):
             and "Traceback" not in err and env.tracked("r1") is None,
             "post-call dynamic member name colliding with a secret is scrubbed deterministically, never an internal error: %s" % j)
     # 结构字面若同时出现在 Request 原始字节里（如 `": "`），分配前预扫描先以 secret-in-input 结束 attempt（更早的关口，R7-B1）
-    e.fake_zshrc("export FAKE_API_KEY='\": \"'\nexport FAKE_API_BASE='https://fake.invalid/v1'\n", path_dir=e.tmp_root, name=".zshrc")
+    # （密钥文件内容不含空白，此结构字面经 base 字面量注入；base 值同属扫描集）
+    e.fake_key_file(path_dir=e.home_key_dir())
+    e.fake_zshrc("export FAKE_API_BASE='\": \"'\n", path_dir=e.tmp_root, name=".zshrc")
     code, out, err, j = env.run("review", env.repo.request("r1"))
     e.check(code == 1 and j["failure_code"] == "secret-in-input" and "Traceback" not in err, "delimiter-shaped literal is caught by the pre-allocation request scan first: %s" % j)
     e.fake_zshrc(None, path_dir=e.tmp_root, name=".zshrc")
@@ -744,7 +781,7 @@ def two_round_cap(e):
     reg = json.loads(base.read_bytes(env.registry))
     e.check(reg["defaults"]["max_rounds"] == 2, "fixture registry default max_rounds = 2")
     live = json.loads(base.read_bytes(os.path.join(e.repo_root, "mechanisms/review-channel/review_channel_registry.json")))
-    e.check(live["defaults"]["max_rounds"] == 2 and live["registry_revision"] == 7, "live Registry: defaults.max_rounds 2, registry_revision 7")
+    e.check(live["defaults"]["max_rounds"] == 2 and live["registry_revision"] == 8, "live Registry: defaults.max_rounds 2, registry_revision 8")
     code, out, err, j = env.run("review", env.repo.request("r1"))
     e.check(code == 0 and j["verdict"] == "FAIL", "r1 FAIL published: %s" % err[-300:])
     env.repo.commit("r1")
@@ -958,6 +995,7 @@ def cases():
         ("channel.validation-reemit", validation_reemit),
         ("channel.multi-candidate", multi_candidate),
         ("channel.probe-preflight", probe_and_preflight),
+        ("channel.key-file", key_file_source),
         ("channel.review-paths", review_paths),
         ("channel.reemission", reemission),
         ("channel.failures-classification", failures_and_classification),

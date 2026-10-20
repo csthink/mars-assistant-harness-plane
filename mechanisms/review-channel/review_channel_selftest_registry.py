@@ -65,6 +65,32 @@ def schema_and_constraints(e):
         builtin(r)
         r["providers"]["fake-builtin"]["key_env"] = "K"
     _rej(e, builtin_bad, message="key_env forbidden for builtin-native")
+
+    def builtin_key_file(r):
+        builtin(r)
+        r["providers"]["fake-builtin"]["key_file"] = "fake.key"
+    _rej(e, builtin_key_file, message="key_file forbidden for builtin-native")
+    # Registry v6（§6.11、§7.5）：official-direct / aggregator 必填 key_file，且只能是密钥目录内的裸文件名
+    _rej(e, lambda r: r["providers"]["fake-official"].pop("key_file"), message="key_file required for official-direct")
+    _rej(e, lambda r: r["providers"]["fake-aggregator"].pop("key_file"), message="key_file required for aggregator")
+    for bad in ("../fake.key", "keys/fake.key", "/abs/fake.key", ".fake.key", "fake.txt", "Fake.key", "fake key.key", "fake.key\n", "", 7):
+        _rej(e, lambda r, b=bad: r["providers"]["fake-official"].update(key_file=b), message="key_file grammar rejects %r" % (bad,))
+    e.check(_load(e, lambda r: r["providers"]["fake-official"].update(key_file="other-provider_2.key"))["revision"] == 1,
+            "a bare lower-case file name ending in .key is accepted")
+
+    # v6 之前的版本仍可读，但不认识 key_file（形状随版本封闭）
+    def older(r, schema, keep_key_file):
+        r["registry_schema"] = schema
+        if schema != "review-channel-registry/v5":
+            r.pop("execution_ports")
+            r.pop("model_mappings")
+        if not keep_key_file:
+            for prov in r["providers"].values():
+                prov.pop("key_file", None)
+    for schema in ("review-channel-registry/v3", "review-channel-registry/v4", "review-channel-registry/v5"):
+        e.check(_load(e, lambda r, s=schema: older(r, s, False))["registry"]["registry_schema"] == schema,
+                "%s without key_file still loads" % schema)
+        _rej(e, lambda r, s=schema: older(r, s, True), message="key_file is outside %s" % schema)
     e.check(G.effective_status({"capability": {"status": "PROBED", "bound_transport": "chat", "bound_effort": "high"}}, "chat", "low") == "UNVERIFIED",
             "tuple drift falls to UNVERIFIED")
     e.check(G.admission("REGISTERED", "probe", True) == "capability-not-configured", "REGISTERED refused")

@@ -14,8 +14,10 @@ RECEIPT_READ_SCHEMAS = ("review-channel-receipt/v2", "review-channel-receipt/v3"
 DECISIONS_SCHEMA = "review-channel-decisions/v1"   # 决定文件（§6.12，Amendment 4）
 PROFILE_SCHEMA = "review-channel-effective-profile/v4"
 PROFILE_READ_SCHEMAS = ("review-channel-effective-profile/v3", PROFILE_SCHEMA)
-REGISTRY_SCHEMA = "review-channel-registry/v5"
-REGISTRY_READ_SCHEMAS = ("review-channel-registry/v3", "review-channel-registry/v4", REGISTRY_SCHEMA)
+REGISTRY_SCHEMA = "review-channel-registry/v6"   # v6：official-direct / aggregator 的 key 改由 key_file 声明的密钥文件承载（§6.11、§7.5）
+REGISTRY_READ_SCHEMAS = ("review-channel-registry/v3", "review-channel-registry/v4", "review-channel-registry/v5", REGISTRY_SCHEMA)
+REGISTRY_PORT_SCHEMAS = ("review-channel-registry/v5", REGISTRY_SCHEMA)   # 允许 execution_ports / model_mappings 与混合 capability 形态
+REGISTRY_KEY_FILE_SCHEMAS = (REGISTRY_SCHEMA,)   # key_file 只在这些版本内合法；更早版本的 Registry 不能为 official-direct / aggregator 取得 key
 CHANNEL_ID = "csthink-harness-plane review-channel"
 DESIGN_FILE = "HarnessPlane_Review_Channel_Design_v1.md"
 
@@ -249,6 +251,10 @@ STRUCTURED_OUTPUTS = ("json_schema", "json_object", "none")
 CAPABILITY_STATUSES = ("REGISTERED", "CONFIGURED", "UNVERIFIED", "PROBED", "REVIEW_ENABLED")
 FORMAL_REQUIRED_STATUSES = ("CONFIGURED", "UNVERIFIED", "PROBED")
 DEFAULTS_KEYS = ("max_rounds", "timeout_seconds", "effort")
+# 密钥文件（§7.5）：key_file 只是密钥目录内的文件名（不含目录分隔符，不以点开头）；密钥目录 = $XDG_CONFIG_HOME/<KEY_DIRECTORY_NAME>
+# （XDG_CONFIG_HOME 已设置且为绝对路径时），否则 $HOME/.config/<KEY_DIRECTORY_NAME>
+KEY_FILE_NAME_RE = re.compile(r"[a-z0-9][a-z0-9._-]{0,62}\.key")   # 以 fullmatch 使用（$ 会放过结尾换行）
+KEY_DIRECTORY_NAME = "mars-assistant"
 DIAGNOSTICS_DIR = "records/diagnostics/review-channel"
 RECEIPT_REF_FIELDS = (
     "receipt_schema", "attempt_id", "subject", "stage", "round", "mode", "receipt_phase",
@@ -273,7 +279,8 @@ FAILURE_CODES = (
     "registry-invalid", "runtime-adapter-missing", "capability-not-configured",
     "formal-authorization-required", "receipt-ref-invalid",
     # 秘密
-    "secret-missing", "secret-duplicate", "secret-dynamic-rejected", "secret-structural-collision", "auth-source-missing",
+    "secret-missing", "secret-duplicate", "secret-dynamic-rejected", "secret-structural-collision", "secret-file-rejected",
+    "auth-source-missing",
     "auth-source-malformed", "auth-source-missing-at-staging", "auth-source-malformed-at-staging",
     "zshrc-unreadable",
     # 被审输入

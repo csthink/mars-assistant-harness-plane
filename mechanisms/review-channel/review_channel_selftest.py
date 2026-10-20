@@ -2,7 +2,7 @@
 
 - 发现两处声明：单元根 `review_channel_selftest_<模块>.py` 与 `adapters/<x>_selftest.py`；每件导出 `cases()` →
   [(case_id, callable)]。callable 接收 Engine，断言失败以 `Engine.fail` / `check` 记录或抛 AssertionError。
-- 夹具：隔离 git 仓（IsoRepo）、假适配器目录、假 Registry、假 zshrc、评审请求构造、净化启动子进程调用入口。
+- 夹具：隔离 git 仓（IsoRepo）、假适配器目录、假 Registry、假 zshrc、假密钥文件、评审请求构造、净化启动子进程调用入口。
 - 变异验收：`fixtures/mutations.json` 逐条施加到单元副本，对应负例在副本下必须红；全部通过才算自测绿。
 - 零工作树副产物：全部临时物住 tempfile；运行前后单元目录树摘要相等（断言）。
 退出码：0 全绿含变异验收 · 1 任一红 · 2 引擎异常。
@@ -110,19 +110,38 @@ class Engine:
         return p
 
     def fake_zshrc(self, text=None, path_dir=None, name="zshrc"):
+        """假 zshrc：缺省只声明 base（key 只来自密钥文件，§7.5）。"""
         d = path_dir or self.tmpdir("zshrc")
         p = os.path.join(d, name)
         with open(p, "w", encoding="utf-8") as f:
-            f.write(text if text is not None else
-                    "export FAKE_API_KEY=sk-fake-secret-value-123\nexport FAKE_API_BASE='https://fake.invalid/v1'\n")
+            f.write(text if text is not None else "export FAKE_API_BASE='https://fake.invalid/v1'\n")
+        return p
+
+    def home_key_dir(self):
+        """净化启动子进程（HOME = 引擎临时根、无 XDG_CONFIG_HOME）所见的密钥目录。"""
+        return os.path.join(self.tmp_root, ".config", "mars-assistant")
+
+    def fake_key_file(self, value=None, path_dir=None, name="fake.key", mode=0o600):
+        """假密钥文件：目录 0700、文件缺省 0600，内容为值加一个换行；value 为 bytes 时原样写入。返回文件路径。"""
+        d = path_dir or self.tmpdir("keys")
+        os.makedirs(d, exist_ok=True)
+        os.chmod(d, 0o700)
+        p = os.path.join(d, name)
+        if os.path.lexists(p):
+            os.remove(p)
+        data = value if isinstance(value, bytes) else ((value if value is not None else "sk-fake-secret-value-123") + "\n").encode("utf-8")
+        fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        os.chmod(p, mode)
         return p
 
     def iso_repo(self):
         return IsoRepo(self)
 
     def install_unit(self, repo, adapters_dir, registry_mutate=None, zshrc_text=None):
-        """把假适配器集与假 Registry 装入隔离仓的受治理位置（mechanisms/review-channel/），把假 ~/.zshrc 写入本引擎 HOME
-        （R10-B1 整改：入口无任何注入口，Registry / 适配器恒取自被审仓根，配置正本恒取自 HOME）。返回仓内适配器目录。"""
+        """把假适配器集与假 Registry 装入隔离仓的受治理位置（mechanisms/review-channel/），把假 ~/.zshrc 与假密钥文件写入本引擎 HOME
+        （R10-B1 整改：入口无任何注入口，Registry / 适配器恒取自被审仓根，配置正本与密钥目录恒取自 HOME）。返回仓内适配器目录。"""
         unit = repo.path("mechanisms/review-channel")
         target = os.path.join(unit, "adapters")
         if os.path.isdir(target):
@@ -130,10 +149,11 @@ class Engine:
         shutil.copytree(adapters_dir, target)
         self.fake_registry(registry_mutate, path_dir=unit, name="review_channel_registry.json")
         self.fake_zshrc(zshrc_text, path_dir=self.tmp_root, name=".zshrc")
+        self.fake_key_file(path_dir=self.home_key_dir())
         return target
 
     def channel(self, repo, sub, request_path, *more, timeout=300):
-        """净化启动子进程调用入口（HOME = 引擎临时根，其 ~/.zshrc 由 install_unit 写入）；返回 (exit, stdout, stderr, stdout_json|None)。
+        """净化启动子进程调用入口（HOME = 引擎临时根，其 ~/.zshrc 与密钥目录由 install_unit 写入）；返回 (exit, stdout, stderr, stdout_json|None)。
         `respond` 以 --decisions 取路径（§6.12），其余子命令以 --request。"""
         prefix = tempfile.mkdtemp(prefix="pycache-", dir=self.tmp_root)
         env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": self.tmp_root, "LC_ALL": "C"}
