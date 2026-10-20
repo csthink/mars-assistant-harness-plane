@@ -121,16 +121,16 @@ apps/harness/.venv/bin/python -m pip download --require-hashes --no-deps --only-
 
 ## 持续集成
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) 在 push 到 `main` 与目标为 `main` 的 pull request 上运行，只有一个 job，名为 `verify`：
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) 在 push 到 `main` 与目标为 `main` 的 pull request 上运行。两个 job 在 macOS arm64 runner（`macos-26`）上并行，各自安装 CPython 3.12 并按 `requirements.lock` 带散列安装依赖：
 
-1. 公开仓安全检查：先跑扫描器自身的阳性对照 `--selftest`，再扫描本仓已跟踪的全部内容。CI 与 pre-commit hook 调用的是同一个文件。
-2. 在 macOS arm64 runner（`macos-26`）上安装 CPython 3.12，按 `requirements.lock` 带散列安装依赖。
-3. 准备 Runtime 开发 bundle 的构建输入（固定摘要的解释器资产与 wheel）和 OpenSSL 3。
-4. 产品测试、Runtime Contract 符合性报告、全部机制单元 selftest。
+1. `Product tests and Runtime Contract conformance`：准备 Runtime 开发 bundle 的构建输入（固定摘要的解释器资产与 wheel）和 OpenSSL 3；按上面 unittest 命令的导入条件加载全部测试模块，确认它们都能导入；然后运行 Runtime Contract 符合性报告。符合性报告运行的就是完整产品测试，任一用例失败、出错或意外通过都使它以非零退出，CI 因此不再单独运行一遍产品测试；`--stream-log` 把逐条用例的结果写到 job 日志。
+2. `Public safety scan and mechanism selftests`：公开仓安全检查（先跑扫描器自身的阳性对照 `--selftest`，再扫描本仓已跟踪的全部内容，CI 与 pre-commit hook 调用的是同一个文件），然后运行全部机制单元 selftest。
+
+第三个 job `verify` 等这两个 job 结束后运行，只有两个都成功时才成功；失败、取消或跳过都使它失败。`main` 分支只要求 `verify` 这一项检查。
 
 CI 不设置 `HARNESS_INSTANCE_ROOT` 与 `HARNESS_INSTANCE_RECORDS`，不调用真实模型，不引用任何 secret，token 权限只有 `contents: read`。测试报告只写在 runner 的临时目录里，不作为 artifact 上传。
 
-runner 镜像的 macOS 低于 bundle 的 `minimumOs` 时，产品测试与符合性报告中安装或启动 bundle 的用例以 `host macOS <版本> is below the bundle minimumOs <版本>` 为原因 skip（见「环境」）。这部分覆盖只在满足该版本的机器上取得，由维护者在本机运行完整套件并留存验证记录。
+runner 镜像的 macOS 低于 bundle 的 `minimumOs` 时，符合性报告所运行的产品测试中安装或启动 bundle 的用例以 `host macOS <版本> is below the bundle minimumOs <版本>` 为原因 skip（见「环境」）。这部分覆盖只在满足该版本的机器上取得，由维护者在本机运行完整套件并留存验证记录。
 
 ## 文档
 

@@ -17,29 +17,22 @@ defaults:
   run:
     shell: bash
 
+# 两个互不依赖的 job 并行运行，job verify 汇总它们的结论。
+# apps/harness/requirements.lock 只登记了 CPython 3.12 macOS arm64 的 rpds-py wheel 散列，
+# Runtime 开发 bundle 的固定解释器资产也是 aarch64-apple-darwin，所以两个 job 都用 macOS arm64 runner。
+# 不设置 HARNESS_INSTANCE_ROOT 与 HARNESS_INSTANCE_RECORDS：依赖产品线仓实例区的用例以明确原因 skip。
 jobs:
-  verify:
-    # 这个 name 是 main 分支 ruleset 的必需状态检查名，改名须同时改 ruleset。
-    name: verify
-    # apps/harness/requirements.lock 只登记了 CPython 3.12 macOS arm64 的 rpds-py wheel 散列，
-    # Runtime 开发 bundle 的固定解释器资产也是 aarch64-apple-darwin，所以用 macOS arm64 runner。
+  conformance:
+    name: Product tests and Runtime Contract conformance
     runs-on: macos-26
     timeout-minutes: 150
     env:
       PY: apps/harness/.venv/bin/python
-      # 不设置 HARNESS_INSTANCE_ROOT 与 HARNESS_INSTANCE_RECORDS：依赖产品线仓实例区的用例以明确原因 skip。
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
           persist-credentials: false
-
-      # 与 pre-commit hook 是同一个文件。先跑阳性对照，扫描器失效时不会给出假的通过。
-      - name: Public safety scanner selftest
-        run: bash tools/check-public-safety-generic.sh --selftest
-
-      - name: Scan tracked content
-        run: bash tools/check-public-safety-generic.sh .
 
       - name: Set up CPython 3.12
         uses: actions/setup-python@v6
@@ -80,18 +73,63 @@ jobs:
           echo "HP_BUNDLE_INPUTS_DIR=$inputs" >> "$GITHUB_ENV"
           echo "HP_BUNDLE_OPENSSL=$openssl_program" >> "$GITHUB_ENV"
 
+      # 符合性报告的运行器先把 apps/harness 放进 sys.path 再发现用例。这里按 README 所列 unittest 命令的
+      # 导入条件（只有仓根与 apps/harness/tests）单独加载一遍，确认每个测试模块不依赖运行器预置的路径也能导入。
+      - name: Product test discovery
+        run: |
+          "$PY" -B - <<'PYCODE'
+          import sys
+          import unittest
+
+          loader = unittest.TestLoader()
+          suite = loader.discover("apps/harness/tests", pattern="test_*.py")
+          for error in loader.errors:
+              print(error, file=sys.stderr)
+          if loader.errors:
+              raise SystemExit("product test discovery failed")
+          print("discovered", suite.countTestCases(), "product tests")
+          PYCODE
+
+      # 产品测试由符合性报告运行：它运行与 README 所列 unittest 命令相同的发现范围（apps/harness/tests 下的
+      # test_*.py），任一用例失败、出错或意外通过都使报告 passed 为 false 并以非零退出；另外逐帧核对 Runtime
+      # 发出的协议帧。--stream-log 把逐条用例的结果与失败详情同时写到本步骤的日志。报告只留在 runner 临时
+      # 目录，不上传。
       # test_bundle 中安装或启动 bundle 的用例要求宿主 macOS 不低于 bundle manifest 的 minimumOs
       # （apps/harness/bundle/manifest.py 的 MINIMUM_OS），与接收方准入的判定相同。runner 镜像低于它时，
       # 这些用例以 "host macOS <版本> is below the bundle minimumOs <版本>" 为原因 skip，其余用例照常运行；
       # 这部分覆盖只在满足该版本的机器上取得，由维护者在本机运行完整套件并留存验证记录。
-      - name: Product tests
+      - name: Product tests and Runtime Contract conformance report
         run: |
-          "$PY" -B -m unittest discover -s apps/harness/tests -p 'test_*.py' -v
+          "$PY" -B apps/harness/tests/run_contract_conformance.py --stream-log --output "$RUNNER_TEMP/conformance"
 
-      # 再完整运行一次同一套件，并逐帧核对 Runtime 发出的协议帧。报告只留在 runner 临时目录，不上传。
-      - name: Runtime Contract conformance report
+  checks:
+    name: Public safety scan and mechanism selftests
+    runs-on: macos-26
+    timeout-minutes: 150
+    env:
+      PY: apps/harness/.venv/bin/python
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # 与 pre-commit hook 是同一个文件。先跑阳性对照，扫描器失效时不会给出假的通过。
+      - name: Public safety scanner selftest
+        run: bash tools/check-public-safety-generic.sh --selftest
+
+      - name: Scan tracked content
+        run: bash tools/check-public-safety-generic.sh .
+
+      - name: Set up CPython 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install locked dependencies
         run: |
-          "$PY" -B apps/harness/tests/run_contract_conformance.py --output "$RUNNER_TEMP/conformance"
+          python -m venv apps/harness/.venv
+          "$PY" -m pip install --disable-pip-version-check --require-hashes -r apps/harness/requirements.lock
 
       - name: Mechanism selftests
         run: |
@@ -118,5 +156,24 @@ jobs:
           run review-channel "$PY" -B -E -s -S -X pycache_prefix="$(mktemp -d)" mechanisms/review-channel/review_channel.py selftest
           if [ "${#failed[@]}" -gt 0 ]; then
             echo "::error::selftest failed: ${failed[*]}"
+            exit 1
+          fi
+
+  verify:
+    # 这个 name 是 main 分支 ruleset 的必需状态检查名，改名须同时改 ruleset；其他 job 不得使用这个名字。
+    # if: always() 让它在被依赖的 job 失败或取消时仍然运行并判红：被跳过的必需检查会被当作通过。
+    name: verify
+    needs: [conformance, checks]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every job to succeed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          printf '%s' "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          if ! printf '%s' "$NEEDS" | jq -e 'length > 0 and all(.[]; .result == "success")' > /dev/null; then
+            echo "::error::a required job did not succeed"
             exit 1
           fi
