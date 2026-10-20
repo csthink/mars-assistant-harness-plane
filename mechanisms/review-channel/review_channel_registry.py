@@ -12,7 +12,8 @@ import review_channel_execution as X
 
 REGISTRY_FILE = os.path.join(base.UNIT_DIR, "review_channel_registry.json")
 _TOP_KEYS = ("registry_schema", "registry_revision", "defaults", "system_default", "providers")
-_PROVIDER_KEYS = ("display_name", "kind", "runtime", "transport", "key_env", "base_env", "auth_source",
+# key_file 只在 C.REGISTRY_KEY_FILE_SCHEMAS 内合法（_validate_provider 按版本拒绝）
+_PROVIDER_KEYS = ("display_name", "kind", "runtime", "transport", "key_env", "key_file", "base_env", "auth_source",
                   "structured_output", "models", "note")   # r18 R18-B2 整改：provider 级 registered_equivalents 不在冻结 schema
 _MODEL_KEYS = ("claimed_vendor", "default_effort", "supported_efforts", "max_input_bytes",
                "registered_equivalents", "capability", "note")
@@ -46,7 +47,7 @@ def load_registry(path=REGISTRY_FILE, adapter_loader=None, repo_root=None, verif
         obj = base.strict_json_load(data)
     except (ValueError, UnicodeDecodeError) as exc:
         _bad("registry JSON: %s" % exc)
-    _closed(obj, _TOP_KEYS + (("execution_ports", "model_mappings") if obj.get("registry_schema")==C.REGISTRY_SCHEMA else ()), "registry")
+    _closed(obj, _TOP_KEYS + (("execution_ports", "model_mappings") if obj.get("registry_schema") in C.REGISTRY_PORT_SCHEMAS else ()), "registry")
     if obj.get("registry_schema") not in C.REGISTRY_READ_SCHEMAS:
         _bad("registry_schema must be %s" % C.REGISTRY_SCHEMA)
     rev = obj.get("registry_revision")
@@ -71,7 +72,8 @@ def load_registry(path=REGISTRY_FILE, adapter_loader=None, repo_root=None, verif
         _bad("providers must be a non-empty object")
     adapters = {}
     for pid, prov in providers.items():
-        _validate_provider(pid, prov, adapter_loader, adapters, "mixed" if obj["registry_schema"]==C.REGISTRY_SCHEMA else obj["registry_schema"]=="review-channel-registry/v4")
+        _validate_provider(pid, prov, adapter_loader, adapters, "mixed" if obj["registry_schema"] in C.REGISTRY_PORT_SCHEMAS else obj["registry_schema"]=="review-channel-registry/v4",
+                           obj["registry_schema"] in C.REGISTRY_KEY_FILE_SCHEMAS)
     if sd["provider"] not in providers or sd["model"] not in providers[sd["provider"]]["models"]:
         _bad("system_default does not name a registered provider / model pair")
     if verify_evidence:
@@ -81,13 +83,13 @@ def load_registry(path=REGISTRY_FILE, adapter_loader=None, repo_root=None, verif
                 cap = model["capability"]
                 if cap["status"] in ("PROBED", "REVIEW_ENABLED"):
                     verify_receipt_ref(root, pid, prov, slug, model, cap, profile_checker)
-    if obj["registry_schema"]==C.REGISTRY_SCHEMA:
+    if obj["registry_schema"] in C.REGISTRY_PORT_SCHEMAS:
         X.verify_ports(obj, repo_root or base.DEFAULT_REPO_ROOT, verify_evidence, profile_checker)
     return {"registry": obj, "sha256": base.sha256_bytes(data), "revision": rev, "adapters": adapters,
             "bytes": len(data)}
 
 
-def _validate_provider(pid, prov, adapter_loader, adapters, archive_schema=False):
+def _validate_provider(pid, prov, adapter_loader, adapters, archive_schema=False, key_files=True):
     where = "providers.%s" % pid
     if not base.is_nonempty_str(pid):
         _bad("provider id must be a non-empty string")
@@ -106,16 +108,20 @@ def _validate_provider(pid, prov, adapter_loader, adapters, archive_schema=False
     transport = prov["transport"]
     if transport not in C.TRANSPORTS:
         _bad("%s.transport outside the closed set" % where)
+    if "key_file" in prov and not key_files:
+        _bad("%s.key_file is outside this registry_schema (key files start at %s)" % (where, C.REGISTRY_SCHEMA))
     if kind in ("official-direct", "aggregator"):
-        for k in ("key_env", "base_env"):
+        for k in ("key_env", "key_file", "base_env") if key_files else ("key_env", "base_env"):
             if not base.is_nonempty_str(prov.get(k)):
                 _bad("%s.%s required for %s" % (where, k, kind))
+        if key_files and not C.KEY_FILE_NAME_RE.fullmatch(prov["key_file"]):
+            _bad("%s.key_file must be a bare file name matching %s" % (where, C.KEY_FILE_NAME_RE.pattern))
         if "auth_source" in prov:
             _bad("%s.auth_source forbidden for %s" % (where, kind))
     else:
         if not base.is_nonempty_str(prov.get("auth_source")):
             _bad("%s.auth_source required for builtin-native" % where)
-        for k in ("key_env", "base_env"):
+        for k in ("key_env", "key_file", "base_env"):
             if k in prov:
                 _bad("%s.%s forbidden for builtin-native" % (where, k))
     if "structured_output" in prov and prov["structured_output"] not in C.STRUCTURED_OUTPUTS:

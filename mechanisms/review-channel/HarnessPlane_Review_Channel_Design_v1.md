@@ -109,7 +109,7 @@ mechanisms/review-channel/
 ├── review_channel_contract.py       # 契约常量：判词机读 schema、finding 与题号文法、叙述约定、分类闭集、失败码闭集（单一语义源）
 ├── review_channel_request.py        # 评审请求校验（对任意 JSON 全封闭）
 ├── review_channel_registry.py       # Registry 装载、schema 校验、capability 证据核验、defaults
-├── review_channel_secrets.py        # 秘密来源：`~/.zshrc` 非执行解析、认证文件三态、扫描集构造
+├── review_channel_secrets.py        # 秘密来源：密钥文件读取（key）、`~/.zshrc` 非执行解析（base）、认证文件三态、扫描集构造
 ├── review_channel_inputs.py         # 被审输入：引用解析、封存、清单、禁名、缺件 fail-closed
 ├── review_channel_taskbook.py       # 任务书渲染（事实段由通道生成）
 ├── review_channel_instruction.py    # 评审方指令注入：判词契约文本 + 五题闭集（与判词模块同源常量）
@@ -469,7 +469,7 @@ Host 取消与 ExecutionPort 异常优先于 Reviewer 输出分类：取消无�
 
 ### 6.11 capability 与 Registry
 
-Registry（`registry_schema = "review-channel-registry/v3"`）是活体数据文件，不入冻结锁面（gov-t8:OD-02 其三；档案库 Amendment r4 的继承）；schema 形状变更须换号并走本设计 amendment，状态值演进由 Human 凭 Receipt 独立提交更新，通道不自写（通道只在 Receipt 给出 `capability_suggestion`）。
+Registry（现行 `registry_schema = "review-channel-registry/v6"`：v4 的 evidence 形态见 §8.6.6；v5 增加产品执行端口登记 `execution_ports` / `model_mappings`，见 §7.5「产品 ExecutionPort 与外部 Host」；v6 在 v5 之上为 official-direct / aggregator 增加必填 `key_file`，key 改由密钥文件承载，见本节字段表与 §7.5「秘密边界」。v3 至 v5 仍可读，其中 `key_file` 禁填，按这些版本装载的 Registry 不能为 official-direct / aggregator 取得 key）是活体数据文件，不入冻结锁面（gov-t8:OD-02 其三；档案库 Amendment r4 的继承）；schema 形状变更须换号并走本设计 amendment，状态值演进由 Human 凭 Receipt 独立提交更新，通道不自写（通道只在 Receipt 给出 `capability_suggestion`）。
 
 ```text
 registry_revision      正整数（排除 JSON 布尔），人工递增
@@ -480,7 +480,8 @@ providers.<id>:
   kind                 official-direct | aggregator | builtin-native
   runtime              适配器标识，取值 = 单元内存在的 adapters/<runtime>.py（§5.2 数据驱动发现）
   transport            该 provider 的线协议，闭集 responses | chat | messages | builtin；须属该适配器声明的支持集
-  key_env / base_env   official-direct / aggregator 必填（变量名，不存值）；builtin-native 禁填
+  key_env / base_env   official-direct / aggregator 必填（变量名，不存值）；builtin-native 禁填。key_env 是 key 在进程内秘密句柄与运行时子进程环境中的变量名（codex 临时配置的 `env_key`），不是读取来源；base_env 是 `~/.zshrc` 中 base URL 的变量名
+  key_file             v6 起 official-direct / aggregator 必填：密钥目录内的密钥文件名（非秘密；裸文件名，文法 `^[a-z0-9][a-z0-9._-]{0,62}\.key$`，不含目录分隔符）；builtin-native 禁填；v3 至 v5 禁填（§7.5）
   auth_source          builtin-native 必填：登录态认证文件路径名（非秘密）；其余 kind 禁填
   structured_output    runtime 为 http 类时可选：json_schema | json_object | none（§7.4）
   models.<slug>:
@@ -515,7 +516,7 @@ providers.<id>:
 **capability 状态语义**（档案库契约 §6.2 的继承，本设计全文承载）：
 
 - `REGISTERED`：Registry 认识该 Profile；无环境或认证事实。
-- `CONFIGURED`：official-direct / aggregator 的 key / base 变量名可安全解析，或 builtin-native 认证文件 `present`；仅此不能越过本级。
+- `CONFIGURED`：official-direct / aggregator 的 key 文件可安全读取（`present`）且 base 变量名可安全解析，或 builtin-native 认证文件 `present`；仅此不能越过本级。
 - `UNVERIFIED`：曾达 `PROBED` / `REVIEW_ENABLED` 但 model、transport 或 effort 越出证据边界后的回退态；提供方文档、兼容声明或模型列表最多支持 Registry 注释，不能越过本级。
 - `PROBED`：有可机械核验的 Receipt 证明该精确元组的 call-path（`PROVEN + SUFFICIENT + NOT_REACHED`，或 `PROVEN + SUFFICIENT + INVALID`）。
 - `REVIEW_ENABLED`：有 Receipt 证明该精确元组产出过受治理判词（`PROVEN + SUFFICIENT + VALID`，`completed_with_valid_verdict`、`verdict_published = true`）。
@@ -637,18 +638,19 @@ Owner 裁定三候选设计期探针后定取舍。本设计冻结**每条候选
 - **容量守卫**：投递总字节数与 Registry `max_input_bytes` 比对，超限 preflight 拒绝（§6.2 第 7 条）；不做分片，分片会破坏「被审输入即全部输入」的封闭性。
 - **单一输出模型**（R1-B10 整改）：直接接口路径下评审方的最终消息恒为一个 JSON 对象 `{machine: <§6.5.1 机读块对象>, narrative: <Markdown 叙述正文字符串>}`；Registry `structured_output = json_schema | json_object` 时以提供方结构化输出约束该形状，`none` 时以指令要求该形状并对文本做 JSON 解析。通道把该对象确定性渲染为严格发布文法的判词（按 §6.5.3 span 提取算法取得的 `machine` 原样 JSON 字节区段 + 解码后的 `narrative`），`narrative` 须满足 §6.4 叙述约定并经 §6.5.2 第 13 条核对；对象不可解析或形状不符即 INVALID、分类 `reviewer_output_invalid`，**本路径不自动补发**（R2-B8 整改：叙述正文在 wrapper 内是字符串而非独立行，§6.5.4 的恢复算法不适用；Amendment 2 的两类触发在本路径均不适用；下一 attempt 按 §6.7 规则 7 由 caller 归因后发起）。「最终消息即判词」在本路径的含义 = 该对象是判词的唯一来源，通道只做形态渲染不改值。
 - **身份证据**：应答体的模型标识进入 `identity_claim`，聚合商据此可判 `logical_model_match`（§6.11）。
-- **秘密**：key 只在进程内内存，请求头由适配器构造；base URL 由 `base_env` 解析（§7.5）；响应体落盘前过秘密扫描。
+- **秘密**：key 只在进程内内存，由 `key_file` 读取，请求头由适配器构造；base URL 由 `base_env` 解析（§7.5）；响应体落盘前过秘密扫描。
 - **重试**：适配器不做重试（继承 no-fallback 与「失败即汇报」）；HTTP 层的单次请求即一次 attempt，`request_count` 恒 1（本路径下「一个 attempt 不等于一次请求」的残留消失）。
 - **KB-37 残留在本路径消失**：无工具循环，「运行时接受配置却不遵守」的观察面只剩 model 与 effort 的实际执行，与 operational claim 同级（§15）。
 
 ### 7.5 秘密边界（档案库契约 §7 与 runner 设计 §6 的全文承载，扩展至新提供方）
 
-- **配置正本** = `~/.zshrc` 中 `export NAME=<literal>` 形态的环境变量声明。通道以非执行解析器读取：不调用 zsh / bash、不 `eval`、不 `source`、不生成可执行临时脚本；只接受当前 Profile 在 Registry 声明的精确变量名，每个名字必须唯一出现为整行 `export NAME=<literal>`；`<literal>` 只允许裸字面量（字符集 `[A-Za-z0-9._:/~%-]+`）、单引号串（内部无 `'`）、双引号串（内部无 `$`、反引号、`\`）；parameter / command / process / arithmetic substitution、glob、重定向、管道、控制运算符、函数、alias、行接续、行尾注释与重复声明一律 fail closed。preflight 只报告 `detected_literal | missing | duplicate | dynamic_rejected`，不显示值、长度、前后缀或可猜测摘要；解析失败不回退到父进程同名变量、其他 startup 文件或硬编码端点。新增提供方（如 `ZHIPU_API_KEY` / `ZHIPU_API_BASE`、`ANTHROPIC_API_KEY` / `ANTHROPIC_API_BASE`）只是 Registry 条目，解析器不改。
+- **key 来源** = 密钥目录内 Registry `key_file` 声明的密钥文件，一个提供方一个文件（Registry v6 起）。密钥目录 = `$XDG_CONFIG_HOME/mars-assistant`（`XDG_CONFIG_HOME` 已设置且为绝对路径时），否则 `$HOME/.config/mars-assistant`；与 `~/.zshrc` 同属派生路径，命令行与评审请求都无注入口，覆盖只经进程环境的 `XDG_CONFIG_HOME` 或 `HOME`（非秘密设置）。读取以 `O_NOFOLLOW | O_NONBLOCK` 打开后对同一描述符 `fstat`，判定与读取之间不按路径重开：须为普通文件（符号链接、目录、FIFO 与设备文件拒绝）、属主为当前有效用户、无任何组与其他用户权限位（`mode & 0o077 == 0`，如 0600 或 0400）；内容去掉一个结尾换行（LF 或 CRLF）后须为非空、至多 4096 字节的可打印 ASCII（0x21 至 0x7E，不含空白与控制字符）。状态闭集 `present | missing | empty | not_regular_file | foreign_owner | permissions_too_open | malformed | unreadable`：`missing`（含密钥目录不存在）与 `empty` 和变量未声明同级，失败码 `secret-missing`；其余拒绝态失败码 `secret-file-rejected`。不回退到父进程同名环境变量、`~/.zshrc` 中同名声明或任何其他来源。环境状态报告对 key 只记 `key_env` 名与 `key_file_present`；失败消息只含文件名与状态词，不含值、长度、目录路径或前后缀。密钥目录本身的权限不核（属主与权限位的检查落在文件上，他人不能造出当前用户所有的文件）。
+- **base 配置正本** = `~/.zshrc` 中 `export NAME=<literal>` 形态的环境变量声明。通道以非执行解析器读取：不调用 zsh / bash、不 `eval`、不 `source`、不生成可执行临时脚本；只接受当前 Profile 在 Registry 声明的精确 base 变量名，每个名字必须唯一出现为整行 `export NAME=<literal>`；`<literal>` 只允许裸字面量（字符集 `[A-Za-z0-9._:/~%-]+`）、单引号串（内部无 `'`）、双引号串（内部无 `$`、反引号、`\`）；parameter / command / process / arithmetic substitution、glob、重定向、管道、控制运算符、函数、alias、行接续、行尾注释与重复声明一律 fail closed。preflight 只报告 `detected_literal | missing | duplicate | dynamic_rejected`，不显示值、长度、前后缀或可猜测摘要；解析失败不回退到父进程同名变量、其他 startup 文件或硬编码端点。新增提供方（如 `ZHIPU_API_KEY` / `zhipu.key` / `ZHIPU_API_BASE`）只是 Registry 条目加一个密钥文件，读取器与解析器不改。
 - 秘密解析在所有模式下（含 standalone preflight）都是硬性通过条件。
 - 解析结果只进入从空环境建立的适配器执行上下文（子进程环境或进程内请求头），除选中的 key / base 外只注入显式允许的无秘密运行变量；父进程其他环境不继承。
 - builtin-native 与 claude 登录态：认证文件三态、先验后写、扫描集扩展、写回禁令按 §7.2 六条同款处理；认证文件路径名由 Registry `auth_source` 声明。
 - **落盘前秘密终检**：全部持久 artifact（判词、Receipt、effective Profile、诊断层）先在内存内构造并扫描；命中已解析的 key / 端点值或认证载荷扫描集中的任一值——无论出现在评审方输出还是请求侧证据字段——该 attempt `verdict_validation = INVALID`、判词不发布，泄漏内容以 `[REDACTED-SECRET]` 替换后只留诊断与 Receipt 事实（`secret_leak_redacted` / `secret_leak_in_evidence` 分别记录）。
-- 秘密值与端点值绝不进入命令行、评审方指令、被审输入、事件流、判词、Receipt、异常文本或 Registry；允许记录变量名与非秘密端点身份哈希。
+- 秘密值与端点值绝不进入命令行、评审方指令、被审输入、事件流、判词、Receipt、异常文本或 Registry；允许记录变量名、密钥文件名与非秘密端点身份哈希。
 
 ### 7.6 运行时版本：只记录（gov-t8:OD-02 其十四）
 
@@ -888,8 +890,8 @@ legacy-git 凭据核验固定祖先 commit 的原 Receipt blob 及摘要；工�
 **自测承诺**（离线、零网络、零费用；等价类逐条有能红能绿的双向证明；按 KB-36 不接线，人工发起）：
 
 1. Request 校验全封闭（顶层非对象、类型错、布尔冒充整数、字符串冒充授权布尔、round 文法、stage 闭集、profile 半对；`request_schema` 非 v4、`review_brief.questions` 或 `standard_questions` 在场、`evidence_limits[].kind` 取二值闭集外的值各一负例，Amendment 4）。
-2. Registry：schema 版本、defaults 必填与类型、kind 与 runtime 组合合法性、key / base / auth_source 双向约束、capability 元组必填、receipt_ref 内容驱动核验、`max_input_bytes` 必填面。
-3. 秘密来源：zshrc 三种字面量正例、substitution / glob / 重定向 / 管道 / 重复 / 缺失负例、不泄值；认证文件三态；扫描集扩展；落盘前终检命中即不发布。
+2. Registry：schema 版本、defaults 必填与类型、kind 与 runtime 组合合法性、key / key_file / base / auth_source 双向约束、`key_file` 文法与 v6 之前版本禁填（v3 至 v5 不带 `key_file` 仍可读）、capability 元组必填、receipt_ref 内容驱动核验、`max_input_bytes` 必填面。
+3. 秘密来源：密钥文件各状态（缺失、空、组或其他用户权限位、他人所有、符号链接、目录、FIFO、内容不合文法、不可读）的失败码与不泄值、不泄目录路径，同名环境变量与 zshrc 声明不回退，密钥目录派生（XDG_CONFIG_HOME 绝对路径优先）；净化启动子进程下同样实撞；zshrc（base）三种字面量正例、substitution / glob / 重定向 / 管道 / 重复 / 缺失负例、不泄值；认证文件三态；扫描集扩展（key 文件值与 base 字面量逐个解析）；落盘前终检命中即不发布。
 4. 被审输入：引用解析命中与缺件、豁免声明放行、禁名自动改名、封存后来源改动不影响投递、上一轮闭合锚自动入、基线从 Git 历史取、`baseline-unrecoverable`、容量守卫；**多候选**（Amendment 2）：多件候选逐件解析、候选互引记「候选之一」、逐候选基线与固定投递名、候选来源路径集合与上一轮不等 → `inherit-unanchored`；**任务轴多候选**请求文法失败（R33-B1）；**r1 改动区基线**（Amendment 4）：现行冻结事实身份自 `freeze-records.jsonl` 行与 `.md` 记录各取一例并恢复字节、首冻候选声明整件为改动区且不判失败码、身份在案而字节不可恢复 → `baseline-unrecoverable`、r1 不加入 `previous--` 族。锁值引用件的正负例随其形态于 Amendment 4 退役。
 5. 任务书渲染：同输入两次渲染逐字节相同；十节齐备；差异统计正确（多候选下逐候选一小节；r1 含改动区节与基线 SHA-256，Amendment 4）；对象与目标逐候选一行、首行为首候选；问题集节恰为该 stage 五题（task / impl 各一例）；r2+ 含上一轮决定摘要；上一轮 finding 全列；封存后改动来源文件不改变任务书、清单与投递字节（R4-B4）；封存中来源变化 → `seal-mismatch`。
 6. 指令注入：契约文本含全部字段名与闭集、该 stage 五题闭集（task / impl 两套各一例：题号集合恰为五题、`question_assessments` 字段行无 `exhaustive` 成员）、机读块在前要求、差异块之外取 `unchanged_region` 且不得阻断句（Amendment 4）；**骨架行判据**两向与**往返性质**（Amendment 2：占位骨架逐行在场；任一有效机读块以实际值渲染的叙述经第 13 条恢复后逐项相等）；probe 模式与信封类、校验类补发调用的指令形态各异。

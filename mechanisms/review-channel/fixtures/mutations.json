@@ -372,8 +372,8 @@
   {
     "id": "M45-union-scan-all-or-nothing",
     "file": "review_channel_secrets.py",
-    "find": "                        values, _report = resolve_env_names([name], zshrc_path)",
-    "replace": "                        values, _report = resolve_env_names([prov[\"key_env\"], prov[\"base_env\"]], zshrc_path)",
+    "find": "                    except base.PreflightError:\n                        pass\n                name = prov.get(\"base_env\")",
+    "replace": "                    except base.PreflightError:\n                        continue\n                name = prov.get(\"base_env\")",
     "must_fail": [
       "secrets.union-scan"
     ]
@@ -1203,6 +1203,100 @@
     "must_fail": [
       "registry.legacy-receipt-read-semantics",
       "receipt.legacy-shape-semantics"
+    ]
+  },
+  {
+    "id": "M185-key-file-permissions-ignored",
+    "file": "review_channel_secrets.py",
+    "find": "        if st.st_mode & 0o077:\n            return \"permissions_too_open\", None\n",
+    "replace": "",
+    "must_fail": [
+      "secrets.key-file",
+      "channel.key-file"
+    ]
+  },
+  {
+    "id": "M186-key-file-follows-symlink",
+    "file": "review_channel_secrets.py",
+    "find": "    flags = os.O_RDONLY | getattr(os, \"O_NOFOLLOW\", 0) | getattr(os, \"O_NONBLOCK\", 0) | getattr(os, \"O_CLOEXEC\", 0)",
+    "replace": "    flags = os.O_RDONLY | getattr(os, \"O_NONBLOCK\", 0) | getattr(os, \"O_CLOEXEC\", 0)",
+    "must_fail": [
+      "secrets.key-file",
+      "channel.key-file"
+    ]
+  },
+  {
+    "id": "M187-key-file-owner-ignored",
+    "file": "review_channel_secrets.py",
+    "find": "        if st.st_uid != os.geteuid():\n            return \"foreign_owner\", None\n",
+    "replace": "",
+    "must_fail": [
+      "secrets.key-file"
+    ]
+  },
+  {
+    "id": "M188-key-falls-back-to-environment",
+    "file": "review_channel_secrets.py",
+    "find": "    key = read_key_file(key_dir if key_dir is not None else key_directory(), key_file)",
+    "replace": "    key = os.environ.get(key_env) or read_key_file(key_dir if key_dir is not None else key_directory(), key_file)",
+    "must_fail": [
+      "secrets.key-file"
+    ]
+  },
+  {
+    "id": "M189-key-falls-back-to-zshrc",
+    "file": "review_channel_secrets.py",
+    "find": "    key = read_key_file(key_dir if key_dir is not None else key_directory(), key_file)",
+    "replace": "    try:\n        key = read_key_file(key_dir if key_dir is not None else key_directory(), key_file)\n    except base.PreflightError:\n        key = resolve_env_names([key_env], zshrc_path)[0][key_env]",
+    "must_fail": [
+      "secrets.key-file",
+      "channel.key-file"
+    ]
+  },
+  {
+    "id": "M190-key-file-content-unchecked",
+    "file": "review_channel_secrets.py",
+    "find": "    if not _KEY_VALUE_RE.fullmatch(data):\n        return \"malformed\", None\n",
+    "replace": "",
+    "must_fail": [
+      "secrets.key-file",
+      "channel.key-file"
+    ]
+  },
+  {
+    "id": "M191-registry-key-file-optional",
+    "file": "review_channel_registry.py",
+    "find": "        for k in (\"key_env\", \"key_file\", \"base_env\") if key_files else (\"key_env\", \"base_env\"):",
+    "replace": "        for k in (\"key_env\", \"base_env\"):",
+    "must_fail": [
+      "registry.schema-constraints"
+    ]
+  },
+  {
+    "id": "M192-registry-key-file-any-name",
+    "file": "review_channel_registry.py",
+    "find": "        if key_files and not C.KEY_FILE_NAME_RE.fullmatch(prov[\"key_file\"]):",
+    "replace": "        if False:",
+    "must_fail": [
+      "registry.schema-constraints"
+    ]
+  },
+  {
+    "id": "M193-registry-key-file-in-older-schemas",
+    "file": "review_channel_registry.py",
+    "find": "    if \"key_file\" in prov and not key_files:",
+    "replace": "    if False:",
+    "must_fail": [
+      "registry.schema-constraints"
+    ]
+  },
+  {
+    "id": "M194-key-file-name-match-not-full",
+    "file": "review_channel_secrets.py",
+    "find": "    if not isinstance(file_name, str) or not C.KEY_FILE_NAME_RE.fullmatch(file_name):",
+    "replace": "    if not isinstance(file_name, str) or not C.KEY_FILE_NAME_RE.match(file_name):",
+    "must_fail": [
+      "secrets.key-file"
     ]
   }
 ]

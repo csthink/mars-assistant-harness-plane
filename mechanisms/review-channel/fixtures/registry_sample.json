@@ -1,5 +1,5 @@
 {
-  "registry_schema": "review-channel-registry/v3",
+  "registry_schema": "review-channel-registry/v6",
   "registry_revision": 1,
   "defaults": {
     "max_rounds": 2,
@@ -17,6 +17,7 @@
       "runtime": "fake",
       "transport": "responses",
       "key_env": "FAKE_API_KEY",
+      "key_file": "fake.key",
       "base_env": "FAKE_API_BASE",
       "models": {
         "fake-model": {
@@ -39,6 +40,7 @@
       "runtime": "fake",
       "transport": "chat",
       "key_env": "FAKE_API_KEY",
+      "key_file": "fake.key",
       "base_env": "FAKE_API_BASE",
       "models": {
         "agg-model": {
@@ -56,6 +58,7 @@
       "runtime": "fakeinline",
       "transport": "chat",
       "key_env": "FAKE_API_KEY",
+      "key_file": "fake.key",
       "base_env": "FAKE_API_BASE",
       "structured_output": "json_object",
       "models": {
@@ -68,5 +71,7 @@
         }
       }
     }
-  }
+  },
+  "execution_ports": [],
+  "model_mappings": []
 }

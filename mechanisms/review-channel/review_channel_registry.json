@@ -1,6 +1,6 @@
 {
-  "registry_schema": "review-channel-registry/v5",
-  "registry_revision": 7,
+  "registry_schema": "review-channel-registry/v6",
+  "registry_revision": 8,
   "defaults": {
     "max_rounds": 2,
     "timeout_seconds": 3600,
@@ -17,6 +17,7 @@
       "runtime": "codex",
       "transport": "responses",
       "key_env": "DEEPSEEK_API_KEY",
+      "key_file": "deepseek.key",
       "base_env": "DEEPSEEK_API_BASE",
       "models": {
         "deepseek-v4-pro": {
@@ -63,6 +64,7 @@
       "runtime": "http",
       "transport": "chat",
       "key_env": "DEEPSEEK_API_KEY",
+      "key_file": "deepseek.key",
       "base_env": "DEEPSEEK_API_BASE",
       "structured_output": "json_object",
       "models": {
@@ -88,6 +90,7 @@
       "runtime": "http",
       "transport": "chat",
       "key_env": "ZHIPU_API_KEY",
+      "key_file": "zhipu.key",
       "base_env": "ZHIPU_API_BASE",
       "structured_output": "json_object",
       "models": {},
@@ -99,6 +102,7 @@
       "runtime": "http",
       "transport": "chat",
       "key_env": "SILICONFLOW_API_KEY",
+      "key_file": "siliconflow.key",
       "base_env": "SILICONFLOW_API_BASE",
       "structured_output": "json_object",
       "models": {},
@@ -110,6 +114,7 @@
       "runtime": "http",
       "transport": "chat",
       "key_env": "OPENROUTER_API_KEY",
+      "key_file": "openrouter.key",
       "base_env": "OPENROUTER_API_BASE",
       "structured_output": "json_object",
       "models": {},
