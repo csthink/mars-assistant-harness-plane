@@ -4,9 +4,8 @@
 --request 是 handoff-workflow-request/v2 的单次 JSON 输入，放仓外或已忽略的 attempts。
 字段/安全边界正本：handoff-protocol §3、§5、§6、§7。--help 不提供授权。
 调用前会话必须核对本次 Owner 授权、业务条件和精确 paths；程序不证明授权文本来源。
-发布适配：HANDOFF_GITLAB_MR_SCRIPT 指向现有 gitlab-mr-api/scripts/gitlab_mr.py，
-使用其配置、GET 客户端、preflight 与 create/readback。GitHub 使用 HANDOFF_PLATFORM_CONFIG
-与 gh-axi；MIGRATION.md 说明私有免费部署、普通 PR 和独立首次导入。不会修改全局配置。
+发布平台只有 GitHub：使用 HANDOFF_PLATFORM_CONFIG 与 gh-axi（handoff-protocol §6.5），
+缺显式配置时拒绝。不会修改全局配置。
 JSON: handoff-workflow-result/v1；0 completed、1 blocked、2 not-checked/external-unknown。
 申报的人写字段：path/instruction/authority_ref/classification；对齐级另有
 before_after=[{before,after}]、semantic_statement=语义零变化。身份/状态/复核命令从 Git 生成。
@@ -14,7 +13,6 @@ before_after=[{before,after}]、semantic_statement=语义零变化。身份/状�
 import argparse
 from datetime import datetime
 import hashlib
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -22,8 +20,7 @@ import re
 import shlex
 import subprocess
 import sys
-import tempfile
-from urllib.parse import urlsplit, quote
+from urllib.parse import quote
 
 sys.dont_write_bytecode = True
 import handoff_platform as platform
@@ -40,7 +37,7 @@ except ImportError:
 
 def redact_local(message):
     result = str(message)
-    for name in ('GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN', 'GL_CSTHINK_HARNESS_PLANE_TOKEN', 'GL_HOST', 'GL_CSTHINK_HARNESS_PLANE_PROJECT'):
+    for name in ('GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN'):
         value = os.environ.get(name)
         if value:
             result = result.replace(value, '[REDACTED_CONFIG]').replace(quote(value, safe=''), '[REDACTED_CONFIG]')
@@ -367,112 +364,6 @@ def describe(repo, q, proof, base):
     return '\n'.join(out) + '\n'
 
 
-class Adapter:
-    """Reuse the existing platform script. No replacement HTTP client or retries."""
-    def __init__(self, repo, expected_identity=None):
-        script = os.environ.get('HANDOFF_GITLAB_MR_SCRIPT', '')
-        ensure(script and Path(script).is_file(), 'tool-unavailable', 'HANDOFF_GITLAB_MR_SCRIPT 不可用', 'not-checked')
-        spec = importlib.util.spec_from_file_location('_handoff_gitlab_adapter', script)
-        ensure(spec is not None and spec.loader is not None, 'tool-unavailable', '适配脚本不可载入', 'not-checked')
-        self.module = importlib.util.module_from_spec(spec); sys.modules[spec.name] = self.module
-        spec.loader.exec_module(self.module)
-        m = self.module
-        ensure(all(callable(getattr(m, n, None)) for n in ('load_config', 'GitLabClient', 'run_preflight', 'verify_created_merge_request', 'main')),
-               'tool-unavailable', '适配脚本不满足现有契约', 'not-checked')
-        self.script, self.repo = script, repo
-        try:
-            self.config = m.load_config(True)
-            if expected_identity is not None:
-                ensure(self.config.host == expected_identity['host'] and self.config.project == expected_identity['repository'],
-                       'remote-mismatch', 'GitLab 配置与已批准源身份不一致')
-            self.client = m.GitLabClient(self.config)
-        except Stop:
-            raise
-        except Exception as e:
-            raise Stop('tool-unavailable', self.clean(e), 'not-checked') from e
-        origin = repo.need('remote', 'get-url', 'origin')
-        if '://' in origin:
-            u = urlsplit(origin); host, project = u.hostname, u.path.lstrip('/')
-        else:
-            match = re.fullmatch(r'(?:[^@]+@)?([^:]+):(.+)', origin)
-            ensure(match is not None, 'remote-mismatch', 'origin 不是可核对的 GitLab URL')
-            host, project = match.groups()
-        ensure(host == urlsplit(self.config.host).hostname and project.removesuffix('.git') == self.config.project,
-               'remote-mismatch', 'origin 与配置 project/host 不匹配')
-
-    def clean(self, error):
-        token = os.environ.get('GL_CSTHINK_HARNESS_PLANE_TOKEN', '')
-        m = self.module
-        return redact_local(m.redact(str(error), token)) if hasattr(m, 'redact') else 'adapter 错误（无安全脱敏接口）'
-
-    provider = 'gitlab'
-    display_name = 'MR'
-
-    def inspect_repository(self):
-        try:
-            project = self.client.request('GET', '/projects/' + self.config.project_encoded)
-        except Exception as exc:
-            raise Stop('tool-unavailable', self.clean(exc), 'not-checked') from exc
-        ensure(project.get('path_with_namespace') == self.config.project and type(project.get('id')) is int,
-               'remote-mismatch', 'GitLab API project 身份不符')
-        push_urls = self.repo.need('remote', 'get-url', '--push', '--all', 'origin').splitlines()
-        ensure(len(push_urls) == 1 and platform.git_address(push_urls[0]) ==
-               platform.git_address(self.repo.need('remote', 'get-url', 'origin')),
-               'remote-mismatch', 'origin push 地址不一致')
-        self.repository = project
-        return dict(provider='gitlab', host=self.config.host, repository=self.config.project, repository_id=str(project['id']))
-
-    def find_change_requests(self, source, target):
-        m, c = self.module, self.config
-        try:
-            project = self.client.request('GET', '/projects/' + c.project_encoded)
-            ensure(project.get('path_with_namespace') == c.project, 'remote-mismatch', 'API project 不匹配')
-            result = []
-            for page in range(1, 101):
-                rows = self.client.request('GET', f'/projects/{c.project_encoded}/merge_requests', query={
-                    'state': 'all', 'source_branch': source, 'target_branch': target, 'per_page': '100', 'page': str(page)})
-                ensure(type(rows) is list, 'tool-unavailable', 'MR GET 返回值不是列表', 'not-checked')
-                result.extend(rows)
-                if len(rows) < 100:
-                    return result
-            raise Stop('tool-unavailable', 'MR GET 分页未穷尽', 'not-checked')
-        except Stop:
-            raise
-        except Exception as e:
-            raise Stop('tool-unavailable', self.clean(e), 'not-checked') from e
-
-    def read_change_request(self, iid):
-        try:
-            return self.client.request('GET', f'/projects/{self.config.project_encoded}/merge_requests/{iid}')
-        except Exception as e:
-            raise Stop('tool-unavailable', self.clean(e), 'not-checked') from e
-
-    def create_change_request(self, ctx, h, mr, description, target_sha):
-        try:
-            preflight = self.module.run_preflight(self.client, self.config, ctx['source_branch'], ctx['target_branch'], h)
-            ensure(preflight['target_sha'] == target_sha and not preflight['duplicate_open_merge_request_count'],
-                   'remote-mismatch', '发布前置后目标或已有 MR 改变')
-        except Stop:
-            raise
-        except Exception as e:
-            raise Stop('tool-unavailable', self.clean(e), 'not-checked') from e
-        with tempfile.TemporaryDirectory(prefix='handoff-mr-') as temp:
-            path = Path(temp) / 'description.md'; path.write_text(description)
-            args = [sys.executable, '-B', self.script, 'create', '--source-branch', ctx['source_branch'],
-                    '--target-branch', ctx['target_branch'], '--expected-source-sha', h,
-                    '--title', mr['title'], '--description-file', str(path), '--execute']
-            if self.config.host.startswith('http://'):
-                args.append('--allow-insecure-http')
-            p = subprocess.run(args, cwd=self.repo.root, capture_output=True, text=True)
-            if p.returncode:
-                raise Stop('external-unknown', self.clean(p.stderr), 'external-unknown')
-            try:
-                out = data.loads(p.stdout)
-                return self.read_change_request(out['iid'])
-            except Exception as e:
-                raise Stop('external-unknown', self.clean(e), 'external-unknown') from e
-
-
 def remote_refs(repo, ctx):
     try:
         p = subprocess.run(['git', '-C', repo.root, 'ls-remote', '--heads', 'origin',
@@ -483,12 +374,12 @@ def remote_refs(repo, ctx):
     refs = {}
     for line in p.stdout.splitlines():
         sha, ref = line.split('\t'); data.sha(sha); refs[ref.removeprefix('refs/heads/')] = sha
-    ensure(ctx['target_branch'] in refs, 'remote-mismatch', '远端目标分支不存在；首次导入须使用独立 migration 入口')
+    ensure(ctx['target_branch'] in refs, 'remote-mismatch', '远端目标分支不存在')
     return refs
 
 
 def verify_mr(value, ctx, h, states=('opened', 'merged')):
-    actual = value.get('sha') or value.get('diff_refs', {}).get('head_sha')
+    actual = value.get('sha')
     ensure(type(value.get('iid')) is int and value.get('web_url') and
            value.get('source_branch') == ctx['source_branch'] and value.get('target_branch') == ctx['target_branch'] and
            actual == h and value.get('state') in states, 'duplicate-mr', '既有/回读 MR 的状态或 source/target/SHA 不符')
@@ -496,11 +387,8 @@ def verify_mr(value, ctx, h, states=('opened', 'merged')):
 
 
 def select_adapter(repo):
-    if os.environ.get('HANDOFF_PLATFORM_CONFIG'):
-        return platform.GitHubAdapter(repo)
-    if platform.git_address(repo.need('remote', 'get-url', 'origin'))[0] == 'github.com':
-        raise Stop('input-invalid', 'GitHub origin 缺少显式平台配置', 'not-checked')
-    return Adapter(repo)
+    ensure(os.environ.get('HANDOFF_PLATFORM_CONFIG'), 'input-invalid', '缺少显式 GitHub 平台配置', 'not-checked')
+    return platform.GitHubAdapter(repo)
 
 
 def publish(repo, q, adapter_factory=None):
@@ -654,8 +542,7 @@ def main(argv=None, *, required_provider=None, description=None):
             if a.action == 'publish':
                 proof, out['mr'], out['reason'] = publish(repo, q)
                 if out['mr']:
-                    label = 'GitHub PR' if out['mr']['url'].startswith('https://github.com/') else 'GitLab MR'
-                    out['details'].append(label + ' 已回读；仅发布，不含合并和清理')
+                    out['details'].append('GitHub PR 已回读；仅发布，不含合并和清理')
             else:
                 proof = prepare(repo, q)
         out.update(status='completed', content_commit=proof['content_commit'], handoff_commit=proof['handoff_commit'])

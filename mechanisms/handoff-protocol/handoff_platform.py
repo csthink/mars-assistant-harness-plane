@@ -39,7 +39,7 @@ def git_address(value):
     return host, path.removesuffix('.git')
 
 
-def load_config(repo, allow_gitlab=False):
+def load_config(repo):
     filename = os.environ.get('HANDOFF_PLATFORM_CONFIG')
     require(bool(filename), 'input-invalid', 'GitHub 需要 HANDOFF_PLATFORM_CONFIG')
     path = Path(filename).resolve()
@@ -57,7 +57,6 @@ def load_config(repo, allow_gitlab=False):
         data.text(c['deployment_ref'])
     except (OSError, data.Invalid) as exc:
         raise PlatformError('input-invalid', '平台配置不可读或字段错误', 'not-checked') from exc
-    require(allow_gitlab or not os.environ.get('HANDOFF_GITLAB_MR_SCRIPT'), 'input-invalid', 'GitHub 与 GitLab 发布配置冲突')
     return c
 
 
@@ -151,21 +150,19 @@ class GitHubAdapter:
     provider = 'github'
     display_name = 'PR'
 
-    def __init__(self, repo, config=None, api=None, bind_origin=True):
+    def __init__(self, repo, config=None, api=None):
         self.repo, self.config = repo, config if config is not None else load_config(repo)
         self.api = api if api is not None else GitHubAPI(repo.root)
         self.endpoint = '/repos/' + self.config['repository']
-        self.bind_origin = bind_origin
 
     def inspect_repository(self):
         c = self.config
-        if self.bind_origin:
-            expected = ('github.com', c['repository'])
-            require(git_address(self.repo.need('remote', 'get-url', 'origin')) == expected,
-                    'remote-mismatch', 'origin 与 GitHub 配置不一致')
-            push_urls = self.repo.need('remote', 'get-url', '--push', '--all', 'origin').splitlines()
-            require(len(push_urls) == 1 and git_address(push_urls[0]) == expected,
-                    'remote-mismatch', 'origin push URL 与 GitHub 配置不一致')
+        expected = ('github.com', c['repository'])
+        require(git_address(self.repo.need('remote', 'get-url', 'origin')) == expected,
+                'remote-mismatch', 'origin 与 GitHub 配置不一致')
+        push_urls = self.repo.need('remote', 'get-url', '--push', '--all', 'origin').splitlines()
+        require(len(push_urls) == 1 and git_address(push_urls[0]) == expected,
+                'remote-mismatch', 'origin push URL 与 GitHub 配置不一致')
         path = self.repo.locate('HEAD', c['deployment_ref'], strict=True)
         require(path.startswith(('records/governance/', 'decisions/', 'HANDOFF/progress/')),
                 'conditions-unmet', 'deployment_ref 须定位当前正式决定')

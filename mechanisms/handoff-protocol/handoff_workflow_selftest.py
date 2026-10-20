@@ -829,7 +829,7 @@ class Fixture(unittest.TestCase):
         fixture = self; calls = []
         class Fake:
             def __init__(self, repo):calls.append('adapter')
-            def inspect_repository(self): return {'provider': 'gitlab'}
+            def inspect_repository(self): return {'provider': 'github'}
             def find_change_requests(self, source, target):calls.append('GET'); return existing or []
             def read_change_request(self, iid):calls.append('readback'); return existing[0]
             def create_change_request(self, ctx, h, mr, description, target_sha):
@@ -935,14 +935,16 @@ class Fixture(unittest.TestCase):
 
 
     def test_S12_config_errors_redacted(self):
-        with patch.dict(os.environ, {'GL_HOST': 'https://private.invalid', 'GL_CSTHINK_HARNESS_PLANE_PROJECT': 'secret/project', 'GL_CSTHINK_HARNESS_PLANE_TOKEN': 'token/value'}):
-            result = flow.redact_local('https://private.invalid secret/project secret%2Fproject token/value token%2Fvalue')
-        self.assertNotIn('private', result); self.assertNotIn('secret', result); self.assertNotIn('token', result)
+        # Synthetic values bound to two of the redacted GitHub variable names.
+        values = dict(zip(('GH_TOKEN', 'GITHUB_ENTERPRISE_TOKEN'), ('fixture/alpha', 'fixture/beta')))
+        with patch.dict(os.environ, values):
+            result = flow.redact_local('fixture/alpha fixture%2Falpha fixture/beta fixture%2Fbeta')
+        self.assertNotIn('fixture', result); self.assertEqual(result.count('[REDACTED_CONFIG]'), 4)
 
 
-    def test_S13_missing_adapter_reports_not_checked(self):
-        with patch.dict(os.environ, {'HANDOFF_GITLAB_MR_SCRIPT': ''}), self.assertRaises(flow.Stop) as caught:
-            flow.Adapter(self.repo)
+    def test_S13_missing_platform_config_reports_not_checked(self):
+        with patch.dict(os.environ, {'HANDOFF_PLATFORM_CONFIG': ''}), self.assertRaises(flow.Stop) as caught:
+            flow.select_adapter(self.repo)
         self.assertEqual(caught.exception.status, 'not-checked')
 
 

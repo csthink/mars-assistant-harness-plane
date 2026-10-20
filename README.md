@@ -89,7 +89,6 @@ apps/harness/.venv/bin/python -B mechanisms/delivery-method/run_delivery_method_
 apps/harness/.venv/bin/python -B mechanisms/gates/gates.py selftest
 apps/harness/.venv/bin/python -B mechanisms/handoff-protocol/handoff_selftest.py
 apps/harness/.venv/bin/python -B mechanisms/handoff-protocol/handoff_cl56_selftest.py
-apps/harness/.venv/bin/python -B mechanisms/handoff-protocol/handoff_cl57_selftest.py
 apps/harness/.venv/bin/python -B mechanisms/handoff-protocol/handoff_workflow_selftest.py
 apps/harness/.venv/bin/python -B mechanisms/repo-layout/history_read_selftest.py
 apps/harness/.venv/bin/python -B -E -s -S -X pycache_prefix="$(mktemp -d)" mechanisms/review-channel/review_channel.py selftest
