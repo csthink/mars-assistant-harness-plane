@@ -112,7 +112,6 @@ jobs:
           run gates "$PY" -B mechanisms/gates/gates.py selftest
           run handoff-protocol "$PY" -B mechanisms/handoff-protocol/handoff_selftest.py
           run handoff-protocol-cl56 "$PY" -B mechanisms/handoff-protocol/handoff_cl56_selftest.py
-          run handoff-protocol-cl57 "$PY" -B mechanisms/handoff-protocol/handoff_cl57_selftest.py
           run handoff-protocol-workflow "$PY" -B mechanisms/handoff-protocol/handoff_workflow_selftest.py
           run repo-layout "$PY" -B mechanisms/repo-layout/history_read_selftest.py
           # 评审通道只接受净化启动：-B -E -s -S 与已存在的 pycache_prefix 目录。

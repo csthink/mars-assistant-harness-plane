@@ -34,7 +34,7 @@ HarnessPlane 融合产品线的唯一交付仓：受治理的 Git 仓库 + 可�
 | 有哪些机制单元、哪些进分发载荷 | `mechanisms/MECHANISMS.md` |
 | 本仓怎么协作、什么动作需要授权 | `AGENTS.md` |
 | 接手、记进度、MR/PR 申报与托管迁移前置怎么走 | `HANDOFF/README.md`（指针与操作摘要；申报规则正本 = handoff-protocol 设计 §7） |
-| GitHub 独立 PR 入口与首次迁移工具怎么用 | `mechanisms/handoff-protocol/MIGRATION.md`（github_pr_api.py 与 handoff_migration.py；连接配置不授予发布或迁移权限） |
+| GitHub 独立 PR 入口怎么用 | 交接协议设计 §6.5 与 `.agents/skills/cst-ship/SKILL.md`（github_pr_api.py；连接配置不授予发布权限） |
 | 本项目治理 CI 服务端机制的退役记录与仓外历史 | `records/GITLAB_CI_ENFORCEMENT.md` |
 
 CL-55 已按 records/governance/review-channel/HarnessPlane_Review_Channel_Owner_Decisions_D11.md 启用 archive-v1，本任务分支的 reviews/ 与 tasks/*/reviews/ 原件已迁移退出。新轮使用仓外双副本，正式结果留在 Git；固定旧轮来源由切换决定与既有历史声明解析。主 checkout 与远端是否已交付须按实际合并状态核实，不能从旧版本发起新评审。

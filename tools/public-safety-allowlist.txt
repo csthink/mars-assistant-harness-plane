@@ -17,8 +17,6 @@
 ^apps/harness/tests/test_runtime\.py:        self\.h\.call\("runtime\.snapshot\.next",dict\(scopeRef=scope,snapshotId=first\["snapshotId"\],pageToken[=]"page:forged"\),error="RESYNC_REQUIRED"\)$
 # mechanisms/handoff-protocol/handoff_cl56_selftest.py：平台配置里夹带的合成 token 字段，用于验证配置装载拒绝内嵌凭据
 ^mechanisms/handoff-protocol/handoff_cl56_selftest\.py:                p\.write_text\(json\.dumps\(dict\(self\.c, token[=]'test-secret'\)\)\)$
-# mechanisms/handoff-protocol/handoff_workflow_selftest.py：合成的平台环境变量值（主机为 .invalid 保留域），用于验证错误信息对配置值脱敏
-^mechanisms/handoff-protocol/handoff_workflow_selftest\.py:        with patch\.dict\(os\.environ, \{'GL_HOST': 'https://private\.invalid', 'GL_CSTHINK_HARNESS_PLANE_PROJECT': 'secret/project', 'GL_CSTHINK_HARNESS_PLANE_TOKEN'[:] 'token/value'\}\):$
 # mechanisms/review-channel/adapters/codex_selftest.py：写进 selftest 临时目录的合成登录态认证文件内容，用于验证适配器读取认证文件；不是真实 token
 ^mechanisms/review-channel/adapters/codex_selftest\.py:            f\.write\('\{"tokens": \{"access_token"[:] "AT-secret-1"\}\}'\)$
 
@@ -38,5 +36,3 @@
 
 # apps/harness/tests/test_publish.py：带 userinfo 的合成远端地址，用于验证发布目标拒绝内嵌凭据的地址
 ^apps/harness/tests/test_publish\.py:                 \("publishTarget\.remoteAddress", dict\(remoteAddress="https://user:secret@github\.com/o/r\.git"\)\),$
-# mechanisms/handoff-protocol/handoff_cl57_selftest.py：合成的 SSH 地址（owner/project 为占位名），用于验证迁移工具拒绝与声明不一致的 Git 地址
-^mechanisms/handoff-protocol/handoff_cl57_selftest\.py:                        'git@github\.com:owner/other\.git','ssh://root@github\.com/owner/project\.git',$

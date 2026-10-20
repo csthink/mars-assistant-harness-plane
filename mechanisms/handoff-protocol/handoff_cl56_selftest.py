@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""CL-56 隔离平台契约与真实本地 Git 对象验证。无真实平台写入。"""
+"""GitHub 发布适配与独立入口 github-pr-api 的隔离验证。无真实平台写入。"""
 import base64
+import contextlib
 import copy
+import io
 import json
 import os
 from pathlib import Path
@@ -12,11 +14,9 @@ import unittest
 from unittest.mock import patch
 
 sys.dont_write_bytecode = True
-import handoff_data as data
+import github_pr_api as entry
 import handoff_platform as plat
-import handoff_migration as mig
 import handoff_workflow as flow
-import handoff_status as status
 import handoff_workflow_selftest as fixture_module
 
 
@@ -69,9 +69,10 @@ class GitHubTests(unittest.TestCase):
             flow.publish(self.f.repo, self.f.q, lambda repo: self.adapter)
         self.assertEqual(before, self.f.git('rev-parse', 'HEAD')); self.assertFalse(self.created)
 
-    def test_P01_missing_conflicting_config_and_push_url(self):
-        with patch.dict(os.environ, {}, clear=True), self.assertRaises(flow.Stop):
+    def test_P01_missing_config_and_push_url(self):
+        with patch.dict(os.environ, {}, clear=True), self.assertRaises(flow.Stop) as caught:
             flow.select_adapter(self.f.repo)
+        self.assertEqual((caught.exception.reason, caught.exception.status), ('input-invalid', 'not-checked'))
         self.f.git('remote', 'set-url', '--push', 'origin', 'git@github.com:owner/other.git')
         with self.assertRaises(plat.PlatformError): self.adapter.inspect_repository()
         self.assertFalse(self.calls)
@@ -182,150 +183,53 @@ class GitHubTests(unittest.TestCase):
             with self.assertRaises(plat.PlatformError): client('GET', '/repos/owner/project')
 
 
-class LocalTransport(mig.Transport):
-    def __init__(self, repo, q, source, target):
-        self.repo, self.q = repo, q
-        self.urls = dict(source=str(source), target=str(target))
-
-
-class LocalPlatforms:
-    def inspect_source(self): return None
-    def inspect_target(self): return None
-    def branches(self): return []
-
-
-class MigrationTests(unittest.TestCase):
+class EntryTests(unittest.TestCase):
     def setUp(self):
-        self.f = fixture_module.Fixture(); self.f.setUp()
-        # Fixture contains real required implementation bytes at the fixed main.
-        for name in ('handoff_platform.py', 'handoff_migration.py', 'github_pr_api.py', 'HarnessPlane_Handoff_Protocol_Design_v1.md'):
-            self.f.write('mechanisms/handoff-protocol/' + name, (Path(__file__).parent / name).read_text())
-        self.f.commit('migration implementation'); self.h = self.f.seal()['handoff_commit']
-        self.f.git('branch', '-f', 'main', self.h)
-        self.f.git('tag', '-a', 'v1', '-m', 'annotated tag', self.h)
-        tag = self.f.git('rev-parse', 'refs/tags/v1')
-        self.f.git('checkout', '-b', 'migration')
-        self.q = dict(schema='handoff-migration-request/v2', plan_ref=None, approval_ref=None,
-                      source=dict(provider='gitlab', host='https://gitlab.example.test', repository='owner/project', repository_id='1'),
-                      target=dict(provider='github', host='https://github.com', repository='owner/project', repository_id='2'),
-                      source_git_url='https://gitlab.example.test/owner/project.git',
-                      target_git_url='https://github.com/owner/project.git',
-                      refs=[dict(ref='refs/heads/main', oid=self.h), dict(ref='refs/tags/v1', oid=tag)])
-        plan = dict(schema='handoff-migration-plan/v2', **{k:self.q[k] for k in ('source', 'target', 'source_git_url', 'target_git_url', 'refs')},
-                    retained_branch='migration', retained_base=self.h,
-                    inventory={k:dict(disposition='retain', evidence='fixture inventory') for k in
-                               'git_history large_objects lfs submodules archive_repository review_archives collaboration_assets external_callers in_flight'.split()},
-                    verification={k:'evidence.md:2' for k in 'implementation history recovery first_pr'.split()},
-                    source_window='fixture exclusive window', writer_exclusion='fixture excludes writers')
-        self.plan_path = 'records/diagnostics/migration/2026-09-10/plan.md'
-        self.approval_path = 'records/governance/handoff-protocol/Owner_Decisions_fixture.md'
-        self.f.write(self.plan_path, '# Plan\n```migration-plan\n'+json.dumps(plan)+'\n```\n')
-        p = self.f.commit('plan'); self.q['plan_ref'] = dict(commit=p, path=self.plan_path)
-        approval = dict(schema='handoff-migration-approval/v1', plan_ref=self.q['plan_ref'], action='import')
-        self.f.write(self.approval_path, '# Owner import approval\n```migration-approval\n'+json.dumps(approval)+'\n```\n')
-        a = self.f.commit('approval'); self.q['approval_ref'] = dict(commit=a, path=self.approval_path, locator='Owner import approval')
-        self.temp = tempfile.TemporaryDirectory(prefix='migration-test-remotes-')
-        self.source, self.target = [Path(self.temp.name)/name for name in ('source.git', 'target.git')]
-        for folder in (self.source, self.target):
-            folder.mkdir(); mig.run(folder, ['init', '--bare'])
-        self.f.git('push', str(self.source), 'refs/heads/main', 'refs/heads/migration', 'refs/tags/v1')
-        self.transport = LocalTransport(self.f.repo, self.q, self.source, self.target)
+        self.g = GitHubTests(); self.g.setUp()
+        self.f = self.g.f
+        self.temp = tempfile.TemporaryDirectory()
+        self.config = Path(self.temp.name)/'config.json'; self.config.write_text(json.dumps(self.g.c))
+        self.req = Path(self.temp.name)/'request.json'
+        self.f.mr()
+        self.f.q['mr']['declarations'] = [dict(path='decisions/D-01-test.md', instruction='fixture',
+                                            authority_ref='evidence.md#授权', classification='语义级')]
+        self.req.write_text(json.dumps(self.f.q))
+        self.argv = ['publish', '--root', str(self.f.root), '--request', str(self.req), '--json']
 
     def tearDown(self):
-        self.temp.cleanup(); self.f.tearDown()
+        self.temp.cleanup(); self.g.tearDown()
 
-    def execute(self, action='check', transport=None):
-        out = dict(details=[], ref_results=[])
-        mig.execute(self.f.repo, self.q, action, out, platforms=LocalPlatforms(), transport=transport or self.transport)
-        return out
+    def invoke(self, fn):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out): code = fn(self.argv)
+        return code, json.loads(out.getvalue())
 
-    def test_I01_check_readonly_and_exact_binding(self):
-        before = self.f.git('show-ref'); head = self.f.git('rev-parse', 'HEAD')
-        self.execute(); self.assertEqual(before, self.f.git('show-ref')); self.assertEqual(head, self.f.git('rev-parse', 'HEAD'))
-        self.q['refs'][0]['oid'] = self.f.base
-        with self.assertRaises(mig.Stop): self.execute()
-        self.assertEqual(self.transport.refs('target'), {})
+    def test_missing_or_wrong_config_before_shared_publish(self):
+        before = self.f.git('rev-parse', 'HEAD')
+        with patch.dict(os.environ, {}, clear=True), patch.object(flow, 'publish') as publish:
+            code, out = self.invoke(entry.main)
+            self.assertEqual(code, 1); self.assertEqual(out['reason'], 'input-invalid'); publish.assert_not_called()
+        self.config.write_text(json.dumps(dict(self.g.c, provider='gitlab')))
+        with patch.dict(os.environ, {'HANDOFF_PLATFORM_CONFIG': str(self.config)}, clear=True), patch.object(flow, 'publish') as publish:
+            code, out = self.invoke(entry.main); self.assertEqual(code, 1); publish.assert_not_called()
+        self.assertEqual(self.f.git('rev-parse', 'HEAD'), before)
 
-    def test_I02_nonempty_and_concurrent_different_same_extra(self):
-        self.f.git('push', str(self.target), self.h+':refs/heads/other')
-        with self.assertRaises(mig.Stop) as caught: self.execute('import')
-        self.assertEqual(caught.exception.reason, 'target-not-empty')
-        # Named-ref conditional creation cannot overwrite an existing different value.
-        self.f.git('push', str(self.target), self.f.base+':refs/heads/main')
-        self.assertEqual(self.transport.push(self.q['refs']), 'unknown')
-        self.assertEqual(self.transport.refs('target')['refs/heads/main'], self.f.base)
+    def test_entry_and_direct_flow_share_real_prepare_create_and_idempotent_readback(self):
+        def refs(repo, ctx): return dict(main=self.f.base, work=self.f.git('rev-parse', 'HEAD'))
+        with patch.dict(os.environ, {'HANDOFF_PLATFORM_CONFIG': str(self.config)}, clear=True), \
+             patch.object(plat, 'GitHubAdapter', return_value=self.g.adapter), \
+             patch.object(flow, 'remote_refs', side_effect=refs):
+            first = self.invoke(entry.main)
+            second = self.invoke(flow.main)
+        self.assertEqual(first[0], 0); self.assertEqual(second[0], 0)
+        for key in ('schema', 'status', 'content_commit', 'handoff_commit', 'mr'):
+            self.assertEqual(first[1][key], second[1][key])
+        self.assertEqual(len(self.g.created), 1)
+        self.assertIn('申报', self.g.created[0]['body'])
 
-    def test_I02_same_oid_not_claimed_as_created(self):
-        self.f.git('push', str(self.target), self.h+':refs/heads/main')
-        self.assertEqual(self.transport.push(self.q['refs']), 'reconciled')
-        self.execute('verify')
-
-    def test_I03_source_drift_and_extra(self):
-        self.f.git('push', str(self.source), self.h+':refs/heads/unlisted')
-        with self.assertRaises(mig.Stop) as caught: self.execute()
-        self.assertEqual(caught.exception.reason, 'source-changed')
-        self.assertEqual(self.transport.refs('target'), {})
-
-    def test_I03_shallow_and_missing_history_source(self):
-        original = self.f.repo.need
-        def shallow(*args):
-            return 'true' if args == ('rev-parse', '--is-shallow-repository') else original(*args)
-        with patch.object(self.f.repo, 'need', side_effect=shallow), self.assertRaises(mig.Stop): self.execute()
-        self.f.write('records/history-locations.jsonl', json.dumps(dict(source_commit='f'*40))+'\n')
-        tip = self.f.commit('unreachable history')
-        with self.assertRaises(mig.Stop) as caught:
-            mig.verify_history(self.f.repo, [dict(ref='refs/heads/main', oid=tip)])
-        self.assertEqual(caught.exception.reason, 'object-missing')
-
-    def test_I03_source_rewritten_selected_ref(self):
-        mig.run(self.source, ['update-ref', 'refs/heads/main', self.f.base])
-        with self.assertRaises(mig.Stop) as caught: self.execute()
-        self.assertEqual(caught.exception.reason, 'source-changed')
-        self.assertFalse(self.transport.refs('target'))
-
-    def test_I03_approval_not_matching_or_after_plan(self):
-        self.q['approval_ref']['commit'] = self.q['plan_ref']['commit']
-        with self.assertRaises(mig.Stop): self.execute()
-
-    def test_I04_I06_I08_real_import_objects_tag_handoff_recovery(self):
-        before = self.f.git('show-ref'); out = self.execute('import')
-        self.assertTrue(all(r['state'] == 'matched' for r in out['ref_results']))
-        self.assertEqual(self.transport.refs('target'), {r['ref']:r['oid'] for r in self.q['refs']})
-        self.assertNotEqual(self.q['refs'][1]['oid'], self.h)
-        self.execute('verify'); self.assertEqual(before, self.f.git('show-ref'))
-        self.assertEqual(self.transport.refs('source')['refs/heads/main'], self.h)
-        self.assertNotIn(self.q['plan_ref']['commit'], mig.run(self.target, ['rev-list', '--all']).decode())
-        self.assertTrue(self.f.repo.ancestor(self.q['plan_ref']['commit'], self.q['approval_ref']['commit']))
-
-    def test_I05_unknown_push_full_reconciliation_no_retry(self):
-        original = self.transport.push; calls=[]
-        def push(rows):
-            calls.append(rows); original(rows); return 'unknown'
-        with patch.object(self.transport, 'push', side_effect=push):
-            out = self.execute('import')
-        self.assertEqual(len(calls), 1); self.assertIn('归属未核', out['details'][-1])
-
-    def test_I05_unknown_partial_and_extra_preserved(self):
-        def push(rows):
-            self.f.git('push', str(self.target), self.h+':refs/heads/main', self.h+':refs/heads/unlisted')
-            return 'unknown'
-        with patch.object(self.transport, 'push', side_effect=push), self.assertRaises(mig.Stop) as caught:
-            self.execute('import')
-        self.assertEqual(caught.exception.status, 'external-unknown')
-        self.assertIn('refs/heads/unlisted', self.transport.refs('target'))
-
-    def test_I07_atomic_unsupported_no_fallback(self):
-        mig.run(self.target, ['config', 'receive.advertiseAtomic', 'false'])
-        with self.assertRaises(mig.Stop) as caught: self.execute('import')
-        self.assertEqual(caught.exception.reason, 'transport-unavailable')
-        self.assertEqual(self.transport.refs('target'), {})
-
-    def test_I03_bad_ref_closed_request(self):
-        for ref in ('HEAD', 'refs/pull/1/head', 'refs/heads/*'):
-            q = copy.deepcopy(self.q); q['refs'][0]['ref'] = ref
-            with self.assertRaises((mig.Stop, data.Invalid)): mig.request(q)
-        q = dict(self.q, force=True)
-        with self.assertRaises(data.Invalid): mig.request(q)
+    def test_only_publish_no_prepare_merge_cleanup(self):
+        for action in ('prepare', 'merge', 'check-cleanup'):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit): entry.main([action])
 
 
 if __name__ == '__main__':

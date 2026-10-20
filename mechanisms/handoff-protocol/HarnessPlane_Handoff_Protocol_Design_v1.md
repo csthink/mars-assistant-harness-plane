@@ -157,14 +157,14 @@ generator 记录命令供复现，不能因其写在文件里就自动执行。�
 
 ### 5.1 用户入口和授权
 
-- `$handoff` /「记进度」用于显式交接，以 pause 模式保存当前已授权范围的成果与未完成项；不 push、不建 MR。正常交付无需先执行它。
-- 「发起 MR / 创建 MR」或 GitHub 下“发起 PR / 创建 PR”自身授权对当前获授权交付批进行自动收尾、push 与一次 API 创建 MR/PR。条件满足后，同一次用户动作内自动运行 prepare(mr) 和 publish，标题描述自行拟写；不得再要求额外 `$handoff`。已有 MR 或未知外部副作用按 §6.3 只读恢复，不盲重发。
+- `$handoff` /「记进度」用于显式交接，以 pause 模式保存当前已授权范围的成果与未完成项；不 push、不建 PR。正常交付无需先执行它。
+- 「发起 PR / 创建 PR」自身授权对当前获授权交付批进行自动收尾、push 与一次 API 创建 PR。条件满足后，同一次用户动作内自动运行 prepare(mr) 和 publish，标题描述自行拟写；不得再要求额外 `$handoff`。已有 PR 或未知外部副作用按 §6.3 只读恢复，不盲重发。
 - **记进度 auto-commit** 的路径集恒只含本任务进度文件，落本任务分支。普通成果、当前入口和生成物的范围内 commit 继续由 D-08 承载，不扩大到未知文件、其他任务或 main。交接不是业务冻结，不能借此改写冻结字节或追加未经授权的定稿记录。
-- 合并决定恒属 Owner；Owner 核差该批成果、验证、正式裁定、残留及精确清理对象后下达“交付”（含明确执行 $cst-ship / 交付变更），即按 §6.7 委托本批准备、push、创建或识别对象、固定源合并、回读、main 同步和精确清理。仅创建 MR/PR、仅 push 的权限保持；改写历史、其他对象或新批仍另行授权。新会话只读到旧记录不执行，明确“继续交付”才恢复同批剩余动作。
+- 合并决定恒属 Owner；Owner 核差该批成果、验证、正式裁定、残留及精确清理对象后下达“交付”（含明确执行 $cst-ship / 交付变更），即按 §6.7 委托本批准备、push、创建或识别对象、固定源合并、回读、main 同步和精确清理。仅创建 PR、仅 push 的权限保持；改写历史、其他对象或新批仍另行授权。新会话只读到旧记录不执行，明确“继续交付”才恢复同批剩余动作。
 
-**本批交付条件**：会话核对实际授权、任务类型与本批范围、适用 Verify 结果、冻结/裁定及残留的真实证据。里程碑任务全部验收已满足而无 done 时先停报；未终态任务的合法阶段性 MR 不要求整体任务关闭。代码不能仅凭 caller 自填 true 证明条件，程序核定位与结构、调用方核语义；缺少必需条件不发布，不自行补裁定。
+**本批交付条件**：会话核对实际授权、任务类型与本批范围、适用 Verify 结果、冻结/裁定及残留的真实证据。里程碑任务全部验收已满足而无 done 时先停报；未终态任务的合法阶段性 PR 不要求整体任务关闭。代码不能仅凭 caller 自填 true 证明条件，程序核定位与结构、调用方核语义；缺少必需条件不发布，不自行补裁定。
 
-收官次序：终态里程碑任务先由 Owner 判 done，然后核差成果并明确“交付”，由 Agent 按 skill 完成 §6.7 的适用动作；未终态合法阶段批无需整体关闭。仅发起 MR/PR 时保留发布、Owner 合并及按授权整理的窄路径。中途 $handoff 仅保存。上述指令不代替冻结、done、close 或下一业务任务的授权。
+收官次序：终态里程碑任务先由 Owner 判 done，然后核差成果并明确“交付”，由 Agent 按 skill 完成 §6.7 的适用动作；未终态合法阶段批无需整体关闭。仅发起 PR 时保留发布、Owner 合并及按授权整理的窄路径。中途 $handoff 仅保存。上述指令不代替冻结、done、close 或下一业务任务的授权。
 
 ### 5.2 准备、提交与失效
 
@@ -211,15 +211,15 @@ in_progress 保留 context/handoff 解析结果与 location；handoff 为版本�
 - paths 为去重的本批精确仓内路径数组，仅含获授权的内容修改路径；不含 H 的自动追加范围，不含未知改动。删除以 Git 记录的原路径明确列出。authority_refs 是非空定位数组，由会话验证工作范围。路径文法沿用 §3.2。
 - conditions 是本批交付条件证据对象数组；每项闭集键 `requirement_ref`、`evidence_ref`、`result`。result 为 met / unmet / not-checked；mr 模式 conditions 至少一项、requirement_ref 去重且必需条件只允许 met，pause 保留实际值。条件是否穷尽由调用方依据 Definition/冻结范围核对，程序不能证明漏掉的条件。终态裁定另按 §5.1 原判据核。
 - handoff 闭集键为 §3.2 的 summary/evidence/entries/next/after_merge，全部必填；after_merge 按请求 mode 核验。程序生成 version=2、content_commit 与 mode，不允许调用方填写这三项冒充程序生成的 H。generators 为本次已核、可执行的 argv 数组集合；命令必须来自获审入口声明，不能用外来文档充当授权。
-- mr 在 pause 为 null；在 mr 模式为包含 title、summary、declarations 的对象。declarations 按 §7 对每个触发路径提供授权与分级等人写申报；字节、冻结行和 diff 从实际 H/base 生成，不信输入数字。缺任一要求字段停报；描述落本地暂存文件供现有平台脚本消费，不进入 Git 形成自指。
+- mr 在 pause 为 null；在 mr 模式为包含 title、summary、declarations 的对象。declarations 按 §7 对每个触发路径提供授权与分级等人写申报；字节、冻结行和 diff 从实际 H/base 生成，不信输入数字。缺任一要求字段停报；描述只在本次调用内交平台适配发送，不进入 Git 形成自指。
 
 启用 request/v2 后，旧 request/v1 与未知 schema 在任何生成、写入或外部操作前拒绝，返回 not-checked / input-invalid 并说明须按 v2 补齐输入；不自动补 after_merge、不退回旧写入。旧事件继续读取不等于旧请求仍可写。
 
 请求文件是单次输入，不是持久化状态正本；只能放布局允许的本地暂存或仓外临时目录，不留唯一证据、不含 token。prepare/publish 完成后的耐久输出为进度文件与 Git，用于恢复正式状态的必要信息必须已进入 C/H；CL-55 切换后完整评审原件按 §7.1 的 EvidenceRef 另读，不复制进交接。运行时源 SHA、目标 SHA、临时描述与进程阶段留在本次调用结果，不新增长期登记本。
 
-publish 必须先调用共用 prepare(mr) 或复用 HEAD 上仍有效且与 v2 请求完全对应的 version 2 H，再生成描述、复核实际远端 source/target、push、一次 create 和 readback。平台按 §6.5 的显式配置选择。GitLab 仍复用本机 gitlab-mr-api，脚本路径由 HANDOFF_GITLAB_MR_SCRIPT 提供；GitHub 通过本机 gh-axi 的 api 调用基本 PR 接口。配置或适配缺失、不满足创建/回读契约时 NOT_CHECKED，不静默换服务器、改全局技能或跳过共用检查。
+publish 必须先调用共用 prepare(mr) 或复用 HEAD 上仍有效且与 v2 请求完全对应的 version 2 H，再生成描述、复核实际远端 source/target、push、一次 create 和 readback。平台只有 GitHub，按 §6.5 的显式配置绑定，通过本机 gh-axi 的 api 调用基本 PR 接口。配置或适配缺失、不满足创建/回读契约时 NOT_CHECKED，不静默换服务器、改全局技能或跳过共用检查。
 
-本机配置只决定如何访问既定仓库，不提供动作授权；origin、配置 project 与目标必须核对一致。配置值和 token 不写入输出或请求文件。prepare 与 publish 的命令、调用方及授权边界通过仓内 AGENTS/HANDOFF 路由，不能由旧全局技能绕开准备直接 push。直接人工 git/API 不在本入口的机械拦截范围，不恢复 hook/CI。
+本机配置只决定如何访问既定仓库，不提供动作授权；origin、配置 repository 与目标必须核对一致。配置值和 token 不写入输出或请求文件。prepare 与 publish 的命令、调用方及授权边界通过仓内 AGENTS/HANDOFF 路由，不能由旧全局技能绕开准备直接 push。直接人工 git/API 不在本入口的机械拦截范围，不恢复 hook/CI。
 
 ### 6.3 输出、失败与幂等
 
@@ -233,7 +233,7 @@ workflow JSON schema = handoff-workflow-result/v1，字段为 `action`、`status
 
 在旧版本发布发生外部副作用而结果未知的恢复中，先依据原 source/target/SHA 执行下段 GET 核验，再决定是否有获授权的新交付；不能先改 source H 来绕过原身份查询。新写请求迁移不授权重复 push/create，旧结果可只读核实，追加发布仍需当次授权。
 
-push 成功而 create 未知时返回 external-unknown，停止写操作；后继先调用既有客户端的 GET 能力按 project/source/target/SHA 查询。恰一已有 MR 与全部身份一致且 state 为 opened 或 merged 时报告已有结果，不再 POST；closed 状态、身份不一致或多个命中则 blocked，保留差异。GET 失败不能推断无 MR。只有实际证明无 MR、远端 source 仍为 H、且本次重试已获授权时才允许新的 create；不使用无条件自动重试。原平台脚本的错误处理保持，不换浏览器或实例绕过。
+push 成功而 create 未知时返回 external-unknown，停止写操作；后继先调用既有客户端的 GET 能力按仓库/source/target/SHA 查询。恰一已有 MR 与全部身份一致且 state 为 opened 或 merged 时报告已有结果，不再 POST；closed 状态、身份不一致或多个命中则 blocked，保留差异。GET 失败不能推断无 MR。只有实际证明无 MR、远端 source 仍为 H、且本次重试已获授权时才允许新的 create；不使用无条件自动重试。平台适配的错误处理保持，不换浏览器或实例绕过。
 
 已发布后继续改动需重新准备，追加 push/MR 更新另按当次授权；本批不提供自动 MR 更新或 merge 子命令。目标改变需重算描述和差异，发生分叉、冲突或证据异常原样停报，不自动 rebase/force-push。check-cleanup 要求所给 H 与实际合并 source 匹配且可达；本仓不支持 squash 证据重映射，缺失祖先即停报。
 
@@ -247,67 +247,37 @@ CL-53 的实现切换沿革：规则冻结、获授权施工且共享数据校�
 
 本次 S16 边界须经规则冻结，再经获授权的启动说明与摘要核验实施后，用新的真实会话取得支持证据；不能用候选或先前会话的局部通过替代。支持声明带客户端名称、版本、启动形态和配置身份；CLI print、交互终端及桌面入口分别核验，不相互外推。S16 仍是合并和适用整理后的事后验收，不因待验阻止首次发布，也不因首次发布成功视为 S16 已通过。
 
-### 6.5 GitLab/GitHub 基本发布适配（CL-56）
+### 6.5 GitHub 基本发布适配（CL-56）
 
-CL-57 候选（拟 r13，基线 r12）：本节增加独立 GitHub 入口；§6.6 修正首次迁移连接、提交与试批边界。未冻结、未施工前继续使用现行实现。页首既有修订自述为历史，当前冻结事实按治理记录解析。
+CL-57 候选（拟 r13，基线 r12）：本节增加独立 GitHub 入口；同批对原 §6.6 首次迁移的修正随该节删除。页首既有修订自述为历史，当前冻结事实按治理记录解析。
 
-本节仅在规则冻结、获授权实施并通过本节验收后启用；旧工具仍仅支持 GitLab，不能因候选在场而传入 GitHub 配置。handoff/v2、request/v2、status/v3、workflow-result/v1 的字段闭集和 next 算法保持；mode=mr、请求/结果字段 mr、duplicate-mr 是历史协议名，在已绑定 GitHub 的同次调用中对应 PR，不是第二格式。用户显示名称按平台区分，旧客户端不因字段可解析而获得 GitHub 支持声明。
+GitLab 发布适配已删除：托管平台 GitLab 停用后，经外部 gitlab-mr-api 脚本（环境变量 HANDOFF_GITLAB_MR_SCRIPT）的发布路径、只服务于它的配置冲突判断与错误脱敏，以及 P06 GitLab 既有发布回归一并删除，发布只剩本节的 GitHub 一路。下文的字段闭集与历史协议名不变。
+
+本节仅在规则冻结、获授权实施并通过本节验收后启用。handoff/v2、request/v2、status/v3、workflow-result/v1 的字段闭集和 next 算法保持；mode=mr、请求/结果字段 mr、duplicate-mr 是历史协议名，在已绑定 GitHub 的同次调用中对应 PR，不是第二格式。用户显示名称为 PR，旧客户端不因字段可解析而获得 GitHub 支持声明。
 
 **本机配置**：GitHub 适配读取 HANDOFF_PLATFORM_CONFIG 指向的仓外 JSON 文件，schema=handoff-platform-config/v1。键闭集为 schema、provider、host、repository、repository_id、target_branch、deployment、deployment_ref。provider=github，host=https://github.com，repository 为 owner/name，repository_id 为十进制正整数的字符串，target_branch=main；deployment=protected 或 private-free，deployment_ref 为仓内当前正式决定的路径与定位。凭据由已配置 gh-axi 环境加载，不入 JSON、不输出。HANDOFF_GITHUB_CLI 可指定本机可执行 gh-axi 的绝对路径，未指定则由 PATH 找 gh-axi；不执行配置中任意 shell 文本。
 
-GitLab 的旧脚本配置方式保留。GitHub origin 而无显式 GitHub 配置时拒绝，不回退 GitLab。若 origin/config/API 仓库 id 不一致、provider 不支持、目标不为 main、归档绑定身份不相容或有冲突配置，返回 remote-mismatch/input-invalid。publish 在任何本地生成/提交及远端写入前核仓库地址、不可变 id 与部署依据；本机配置不构成授权，deployment_ref 须指已生效的实例决定。本次私有免费取值只对经 Owner 明确批准的目标成立，不为下游仓默认放宽保护。
+缺显式 GitHub 配置时拒绝（input-invalid、not-checked），没有其他平台可回退。若 origin/config/API 仓库 id 不一致、provider 不支持、目标不为 main 或归档绑定身份不相容，返回 remote-mismatch/input-invalid。publish 在任何本地生成/提交及远端写入前核仓库地址、不可变 id 与部署依据；本机配置不构成授权，deployment_ref 须指已生效的实例决定。本次私有免费取值只对经 Owner 明确批准的目标成立，不为下游仓默认放宽保护。
 
-**独立 GitHub 入口**：用户入口名 github-pr-api，仓内脚本为 mechanisms/handoff-protocol/github_pr_api.py；只提供 publish --request <仓外 JSON> [--root <任务 worktree>] [--json] 与帮助。它在任何准备或写入前要求显式 GitHub 配置、拒绝 GitLab 发布配置冲突，然后调用同一个 handoff_workflow.py publish；不复制 prepare、C/H、申报、查重或 API 客户端，不提供直接创建 PR 的旁路。请求/输出沿用 workflow 现行版本与字段；错误仍为同一 result/v1 及退出码。缺配置或错平台明确拒绝，不改环境后重试、不回退旧脚本。既有 gitlab-mr-api 原件保留，GitLab 过渡期回归仍须满足；本项目完成切换后只激活和维护 GitHub 日常发布入口，共用产品适配的兼容契约不由实例迁移自动退役。
+**独立 GitHub 入口**：用户入口名 github-pr-api，仓内脚本为 mechanisms/handoff-protocol/github_pr_api.py；只提供 publish --request <仓外 JSON> [--root <任务 worktree>] [--json] 与帮助。它在任何准备或写入前要求显式 GitHub 配置，然后调用同一个 handoff_workflow.py publish；不复制 prepare、C/H、申报、查重或 API 客户端，不提供直接创建 PR 的旁路。请求/输出沿用 workflow 现行版本与字段；错误仍为同一 result/v1 及退出码。缺配置或错平台明确拒绝，不改环境后重试。
 
 **执行接口**：共享 publish 调用同一适配协议 inspect_repository、find_change_requests、read_change_request、create_change_request。身份均绑定 provider/host/repository_id；源/目标只允许本仓分支。GitHub GET /repos/{owner}/{repo} 核 full_name/id/private/default_branch/归档状态/当前权限；GET /repos/{owner}/{repo}/pulls 以 state=all、head=owner:source、base=target 分页穷尽，再逐个 GET PR 核 head.repo.id、base.repo.id、head.ref、base.ref、head.sha。不能只按列表标题、分支名或编号认定同一对象；fork 源拒绝。分页未穷尽返回未查成，不按首屏无结果发起创建。
 
-请求 mr 保持 title/summary/declarations；输出的 mr.id 为项目内 iid/PR number，不是仓库 id；url 为该对象地址；source/target 为短分支名；sha 为 head SHA；state 统一 opened/closed/merged，GitHub closed 必须另核 merged=true 才映射 merged。适配异常无法确认时返回 external-unknown 或 not-checked，不能以 null/false 猜成功。规范化对象供同一 publish/check/read 路径消费，不建立另一个状态读取器。
+请求 mr 保持 title/summary/declarations；输出的 mr.id 为 PR number，不是仓库 id；url 为该对象地址；source/target 为短分支名；sha 为 head SHA；state 统一 opened/closed/merged，GitHub closed 必须另核 merged=true 才映射 merged。适配异常无法确认时返回 external-unknown 或 not-checked，不能以 null/false 猜成功。规范化对象供同一 publish/check/read 路径消费，不建立另一个状态读取器。
 
-**写入条件**：先检查本批范围、授权、适用验证、C/H、申报二/三和 §7.1 新增提交，再核实际远端目标/source。目标 main 不存在时拒绝本次日常 publish，指向 §6.6；source 只允许尚不存在或为本次可合法快进的旧位置，分叉不自动修复。push 精确源分支，无 force、mirror 或通配符。创建使用普通 PR，draft=false，不请求付费 Draft PR、自动合并或自动删分支。POST body 为 title/body/head/base；body 使用最终 H 生成的申报，不能省略原申报字段。
+**写入条件**：先检查本批范围、授权、适用验证、C/H、申报二/三和 §7.1 新增提交，再核实际远端目标/source。目标 main 不存在时拒绝本次日常 publish（日常 publish 不承担首次导入，§6.6）；source 只允许尚不存在或为本次可合法快进的旧位置，分叉不自动修复。push 精确源分支，无 force、mirror 或通配符。创建使用普通 PR，draft=false，不请求付费 Draft PR、自动合并或自动删分支。POST body 为 title/body/head/base；body 使用最终 H 生成的申报，不能省略原申报字段。
 
 无已有对象且远端源精确为 H 时只创建一次；已有 opened/merged 且 H、两端仓身份和分支完全一致时只回读，closed 未 merged、多个命中或身份变化均阻塞。POST 或 push 结果不确定后停止写入，先 GET 和 ls-remote 对账；不自动重试写入。需要再次写入时仍按原协议取得该次动作授权。GitHub 403/404/409/422 不直接等同对象不存在；应分别保留权限/身份/冲突/输入原因，不改投别仓。
 
 **部署边界**：protected 部署要求读回实际生效的主干保护与当前执行身份约束。private-free 部署必须同时满足已生效的 deployment_ref、当前目标私有、已知该目标保护能力不可用；记录明确来源和原因，不把任意查询失败解释成无要求。执行器拒绝 main 直推、强推、自动批准和修改设置；适用 Verify 与显式必要检查仍满足。不宣称拦截其他有写权限客户端；不能实现的服务端原子保护要求仍拒绝。GitHub merge commit 必须可用，squash/rebase 不作证据替代；本批 publish 不执行任何 merge。
 
-**错误与兼容**：沿用 result/v1 reason 闭集，配置错误=input-invalid，身份不符=remote-mismatch，缺适配/不可读=tool-unavailable，业务/保护条件不满足=conditions-unmet，歧义或关闭对象=duplicate-mr，写入未知=external-unknown。details 给具体平台原因与非敏感定位；不得输出 token、含凭据 URL 或原始授权头。旧 GitLab 行为及 fixtures 必须回归；新的 mr 字段解释与客户端显示须同时发布说明。
+**错误与兼容**：沿用 result/v1 reason 闭集，配置错误=input-invalid，身份不符=remote-mismatch，缺适配/不可读=tool-unavailable，业务/保护条件不满足=conditions-unmet，歧义或关闭对象=duplicate-mr，写入未知=external-unknown。details 给具体平台原因与非敏感定位；不得输出 token、含凭据 URL 或原始授权头。新的 mr 字段解释与客户端显示须同时发布说明。
 
-**切换验收**：P01 两平台身份/缺配置/错项目拒绝；P02 GitHub 普通 PR 创建与完整申报回读；P03 分页查重、fork/多对象/closed 拒绝；P04 push/POST 失联后 GET 对账、无重复写；P05 免费已裁部署与未知 403 区分、main 直推拒绝；P06 GitLab 既有发布回归；P07 人工 merge commit 后 C/H、main first-parent、只读 resume 和按授权 cleanup；P08 新客户端能按平台呈报 PR，旧客户端拒绝未知适配能力。隔离验收与真实平台/新会话验收分别记录，不改 S16 原 NOT_PASSED，也不宣称旧静态 next 缺陷在本批修复。
+**切换验收**：P01 GitHub 身份/缺配置/错仓库拒绝；P02 GitHub 普通 PR 创建与完整申报回读；P03 分页查重、fork/多对象/closed 拒绝；P04 push/POST 失联后 GET 对账、无重复写；P05 免费已裁部署与未知 403 区分、main 直推拒绝；P06 原为 GitLab 既有发布回归，随 GitLab 发布适配删除；P07 人工 merge commit 后 C/H、main first-parent、只读 resume 和按授权 cleanup；P08 新客户端能按平台呈报 PR，旧客户端拒绝未知适配能力。隔离验收与真实平台/新会话验收分别记录，不改 S16 原 NOT_PASSED，也不宣称旧静态 next 缺陷在本批修复。
 
-### 6.6 首次托管历史导入（CL-56）
+### 6.6 首次托管历史导入（已删除）
 
-本节与布局 §7.6 共同规定一次性初始化；不是 publish 的开关，不增加 through-cleanup 授权。候选实施入口为独立 handoff_migration.py check/import/verify --request <仓外 JSON>，尚未实现不得调用。import 只复制已批准的既有 Git refs/对象，不生成业务提交、不修改 origin、不合并、不删除源；切换与归档处理不由 import 暗含执行。
-
-输入 schema=handoff-migration-request/v2；闭集字段 schema、plan_ref、approval_ref、source、target、source_git_url、target_git_url、refs。source_git_url/target_git_url 分别是批准的源/目标 Git 精确地址，独立于对应 host 的 API 根地址；两项与计划逐字相等。plan_ref={commit,path} 指原 GitLab 可达历史中已提交的具体迁移计划，commit 为完整 SHA；approval_ref={commit,path,locator} 指其后 Owner 对该精确计划的批准记录，commit 为完整 SHA、locator 为非空定位；批准记录必须明确指 plan_ref 的提交与路径。两个引用不能相互自指或只指本请求；工具核存在性、源端可达性与计划身份，调用方核真实用户授权。请求中的 source/target/source_git_url/target_git_url/refs 必须逐项等于该计划的批准内容，不能只凭引用存在放行另一个清单。source/target 均为 {provider,host,repository,repository_id}，源=gitlab，目标=github；check/import 均核两端实际 API 身份与 Git 地址，verify 按下述规则只核目标在线身份和本地已批准源证明。refs 为非空去重数组，元素闭集 {ref,oid}：ref 仅完整 refs/heads/ 或 refs/tags/，oid 为精确 Git SHA-1 对象 id，不使用 annotated tag 的 peeled commit 替代标签对象。main 必须在清单内，零 SHA、HEAD、refs/pull、通配符和符号引用拒绝。其他 Git 对象格式本批不支持，拒绝而非截断。
-
-**连接与版本**：source/target 身份仍为四字段闭集；GitHub target.host 只允许 https://github.com。source.host 默认 HTTPS；现有源 API 为 HTTP，不能由源 SSH Git、目标 VPN 或 GitHub SSH 密钥推导其传输已加密。若本次采用 HTTP，精确迁移计划必须明确源身份、实际 HTTP 地址、读取/停写窗口及“HTTP 本身不加密 API 凭据”的事实，由 Owner 对该精确计划的当次批准一并接受；不另建 HTTP 前置批准、source_access 字段或独立批准提交。未有该已提交计划及真实批准前，check/import 不向 HTTP 源发送带凭据 API 请求；verify 不访问源，按下述目标对账规则执行。地址、适用窗口或传输方案改变，重新核差计划与批准；不能自动降级或假称 VPN 已覆盖源。host 不含凭据、路径、query、fragment 或非默认端口。此例外只用于一次性源 API，不扩展 GitHub 或普通发布。
-
-source_git_url/target_git_url 分别只允许无密码的 HTTPS Git 地址、git@host:path.git 或 ssh://git@host/path.git，使用默认端口；主机和去掉 .git 的项目路径必须等于对应身份；check/import 核两端 API 返回的 Git 地址规范身份（GitLab http_url_to_repo/ssh_url_to_repo，GitHub clone_url/ssh_url），verify 只核目标 API 地址，源地址按已批准计划及本地证明读取，不重新声称源 API 当前一致。Git URL 重写后的实际地址须等于批准地址；禁止任意 pushurl、SSH 主机别名重定向、关闭主机密钥核验或自动接受未知主机。SSH 实际主机、密钥身份、服务器主机密钥策略由执行会话核实留证，秘密不入计划；字符串相等不能替代这些事实。GitHub API 继续经 HTTPS gh-axi，GitHub Git 可以用已批准 SSH 地址；SSH 不减免目标空态、精确 refs、atomic 和空期望条件创建。
-
-计划唯一 migration-plan 块使用 handoff-migration-plan/v2，键闭集为 schema、source、target、source_git_url、target_git_url、refs、retained_branch、retained_base、inventory、verification、source_window、writer_exclusion。HTTP 使用说明与实际读取窗口由 source_window 及同件正文承载，批准块仍为 handoff-migration-approval/v1，回指准确 plan_ref 和 action=import；不增第二批准格式。工具先核计划/批准引用、身份和清单绑定，再核相应 action 的平台条件；调用方核真实用户批准及其覆盖的 HTTP 使用说明，非空字符串或伪造批准不能放行。inventory 与 verification 沿现有分类和字段；first_pr 证据须指向点名试批环境与恢复步骤的方案。
-
-新实现仅接受 v2 请求执行 check/import/verify，拒绝 v1 输入且不写入；既有 v1 计划、请求和结果作为历史保存，不自动升级、改旧批准或重试未知写入。此版本变化只涉及独立迁移入口；日常 workflow、handoff 与平台配置版本保持。固定 main 必须具有 v2 规则、适配及适用验收证据，不能只核文件存在就认定具备 v2 能力。
-
-**迁移计划最低内容**：源停写和读取时点、两端身份、精确 refs/对象清单的文件与摘要、在飞内容处置、旧历史/大对象/LFS/子模块盘点、独立档案库与双副本核验、平台协作资产和外部调用方逐项处置、验证/恢复方案、实际允许的初始化动作。固定的 source main 必须已包含本批生效规则及通过验收的必要适配，不能把待审候选当基线。先固定待导入 refs，再提交计划，最后记录对该已提交计划的批准。计划/批准提交不要求反过来包含于它们引用的固定 main，否则会形成提交身份自引用。承载这两项的迁移工作分支必须在计划中列为保留的在飞分支，由原 GitLab 保持可达；首次导入不复制该分支的后续计划/批准提交，目标有基线后通过基本 PR 试批补入，切换前验证这些证明已落目标。最终清单以批准的 plan_ref 为准，导入前任一所选 ref 漂移或出现未申报源内容即停止并重新核差；仅该已申报分支上新增计划/批准记录不改变导入集合，不擅自补范围。
-
-**源保留分支与提交**：retained_base 之后每次提交只允许正式计划或当次批准路径，源保留分支 tip 必须等于批准提交。交接和其他材料须在 retained_base 前保存；源端只按当次点名授权精确 push 批准 tip 并回读，不走会新增 H 的普通 publish，不将该分支先合并进固定 main。导入及 verify 后，在目标首次 PR 试批上下文追加所需交接，源保留分支保持批准 tip；目标新增内容和最终批准链均须另备份恢复。新增其他源 refs 或所选 refs 漂移按原规则重新核差。
-
-**check**：只读核计划/批准、源 API 与清单 ref=oid、对象完整/非浅、目标 ID/私有/主干配置、目标 heads/tags 为空且 API 分支为空。源可达旧 Git 原件按既有 commit 身份保留，不能将任意调用者指定仓外原件加入树；与通常 §7.1 相比，唯一差异是已批准的完整源历史集合不需要预先存在于空目标。需要的历史定位必须在选定 refs 的祖先闭包可达；缺失停报，不能靠保留本机悬空对象称迁移成功。
-
-**import**：再次核 check 输入未变及当次写入授权，排除协作范围内活动写者并明确不能锁住任意远端用户。仅向目标精确 refs 执行原子条件创建：每个 ref 的期望旧值为空，使用显式 --force-with-lease=<ref>: 配合 <oid>:<ref> 及 --atomic。该含 force 的选项只用于“必须尚不存在”的创建条件，不授予覆盖任何已有 ref 的权力；不使用 --mirror、通配符、删除 refspec、自动 fallback 或重写历史。服务端不支持原子推送则拒绝。检查发现目标已有任一 ref 就停止。检查后目标同名 ref 若出现不同 oid，期望空值须拒绝覆盖；若已出现相同 oid，Git 可能返回 up-to-date，不能据此声称是本调用创建。条件约束作用于点名 refs，不能原子锁住整个远端命名空间；并发新增其他 ref 在 verify 检出后阻塞。
-
-**verify / 不确定恢复**：verify 只使用已提交的精确计划、批准、固定源对象的本地完整副本以及目标 API/Git；不初始化 GitLab Adapter、不读取 GitLab 凭据、不访问源 API/refs，不要求 origin 仍指 GitLab。本地核 retained_base 至 approval_ref 的祖先和每提交允许路径等约束，以批准 commit 为边界，不以已追加目标 PR 交接的 HEAD 代替；源实时 tip/refs 与停写事实只由 check/import 在线核验，verify 不报告它们当前仍成立。缺本地批准或源对象即 object-missing，不自动从 GitLab 获取；目标适配仍核显式目标配置、API id 与批准的 Git 地址，在独立迁移验证中不借 origin 选择别仓。
-
-任何写结果未知时停止写入，读回目标全部 heads/tags，与批准清单逐 ref 对账并取得目标对象作 C/H、历史定位与冻结字节验证。import 写后对账也只读目标，不因源随后失联而否定已取得的目标验证结果；写入前的源身份/refs 复核保持。全等且无额外 refs 才能报告 Git 历史内容已核；全等不能证明写入者身份，回读结果与本调用是否创建须分别说明。部分已存在、额外/不同 refs、缺对象、分页/权限失败返回 blocked/not-checked，保留现场，不自动补推、强推或删除。全等恢复不再次 import；证明仍完全为空且授权未失效后，才可按显式继续指令再次尝试。目标已有全等内容不证明协作资料/LFS/归档已迁移。verify 仅验证首次初始化清单；首次 PR 已合法增加分支或推进 main 后，不再用旧清单全等作为最终切换判据，也不删除新增 refs 来使其通过。该阶段按基本 PR 证据、批准的 Git 对象在目标 main 可达、当前冻结对象/历史读取及逐类资料恢复核验，属于正式切换验收。
-
-输出 schema=handoff-migration-result/v2；字段闭集 schema、action、status、reason、plan_ref、source、target、source_git_url、target_git_url、ref_results、details。source_git_url/target_git_url 回显已核无凭据的两端地址；输入不合法时不回显原始 URL。action=check/import/verify；status=completed/blocked/not-checked/external-unknown；reason=none/input-invalid/identity-mismatch/conditions-unmet/target-not-empty/source-changed/object-missing/transport-unavailable/external-unknown；ref_results 为 {ref,expected_oid,observed_oid,state} 数组，observed_oid 未核为 null，state=matched/absent/mismatch/unknown。details 仅非敏感说明与证据定位，不写凭据。退出码0表示该 action 完成，1阻塞，2未查成或外部未知；import completed 不等于平台切换完成。
-
-输入/输出只为当次调用，不是新状态登记本。必要正式迁移决定及结果按已有进度和 Owner Decisions 记录保留，完整资产清单和运行日志按布局 §7.6 保存。不得在 main 补造迁移结果提交、反复创建完成收据 PR 或改旧 handoff。正式切换仍在历史、基本 PR 试批、资产处置和恢复验证后另按具体指令进行，禁止源目标同时作为日常写入口。为解决首次 PR 的 origin 身份检查，导入与 verify 通过后允许当次点名授权的临时试批配置：仍在 D-09 的同一任务 worktree、分支和单一执行会话操作，不新建并行 clone。逐一列出该 clone 的全部 worktree、原 fetch/push URL、目标 origin、原/目标平台配置路径、归档绑定及恢复步骤，核无其他活动写者后，才修改该 clone 共享 origin 与本次进程的显式 GitHub 配置。不得将临时修改伪装为 worktree 私有配置，也不得用 Git 环境覆写或跳过 bind_origin 绕过身份检查。
-
-试批窗口内只有点名的首次 PR 可以向目标写入，源与其他任务停止日常写入；本次进程不设置 HANDOFF_GITLAB_MR_SCRIPT，不删除或更换个人全局脚本、GL_HOST 或凭据。失败或中止先保全目标新增提交/交接与配置现况；push/PR 结果未知时优先保持目标配置，按原请求和实际 source/target/H 身份只读对账，不先 prepare 新 H。已核清结果后，只有恢复动作也已被本次明确授权，才恢复原配置，否则保持停写等待指令。恢复配置不撤销已存在目标 PR、不重试未知创建、不移动 refs。通过人工 merge commit、目标同步及真实新会话只读接手后，另经明确正式切换决定使 GitHub 成为唯一日常入口；临时配置指令不是正式切换或继续其他任务的授权。
-
-验收：I01 空目标正确身份及完整精确清单；I02 检查时非空拒绝、并发同名不同 oid 条件拒绝、同 oid 不冒认本次创建、并发其他 ref 回读阻塞；I03 错源/错目标/源漂移/浅历史/非祖先历史拒绝；I04 旧 Git 报告原提交身份保留，新仓外原件不载入；I05 原子推送失联后的全等、部分、额外 refs 对账；I06 annotated tags/LFS/子模块与外部资产分类，不把 Git refs 等同全部资料；I07 不支持 atomic 时无顺序 fallback；I08 verify 完整历史并验证切换失败时源仍可恢复，固定 refs 后提交计划/批准不形成自引用且首次 PR 补入证明。真实目标动作必须绑定已批准清单，隔离夹具不能代替实际迁移验收。
-
-CL-57 补充验收：v2 两端 SSH/HTTPS Git 与各自 API 身份正确绑定；HTTP 使用范围随精确迁移计划批准，无有效计划/批准时在源 API 调用前拒绝，不能以目标 VPN 事实代替；错主机/项目/API id/重写地址/旧版本拒绝；GitHub SSH 身份、主机密钥和 atomic 能力的真实核验；github-pr-api 与共用 publish 结果及副作用顺序一致；源批准 tip 不被 H 改动；源失联/无源凭据/目标 origin 下 verify 仍可独立对账，源调用计数为零，缺本地证明拒绝且不联网补齐；首次 PR 后按祖先及资料验收、不重复初始化全等核验；临时配置实际影响与未知写入对账后恢复；GitHub-only 环境下发布与只读接手无 GitLab 请求。隔离夹具证明机械拒绝和调用范围，传输、真实首次 PR/人工合并/新会话分别留实测证据；既有 P/I 场景继续适用，不宣称全通过。
+原一次性初始化入口 handoff_migration.py（check、import、verify，handoff-migration-request/v2、handoff-migration-plan/v2、handoff-migration-approval/v1、handoff-migration-result/v2）及其 I01 至 I08 与 CL-57 补充验收已删除：GitLab 到 GitHub 的首次导入已经完成，源平台 GitLab 已停用，该入口不能再运行。日常 publish 不承担首次导入；今后如需新的托管平台迁移，须另行设计并获授权，不沿用已删除的格式。
 
 ### 6.7 cst-ship 交付 skill
 
@@ -327,7 +297,7 @@ Owner 核对本批成果、适用 Verify、正式裁定、残留和指定清理�
 
 完整交付时，Owner 在下达“交付”前按本节完成内容、身份、授权和残留核差；最终 C/H 形成后由执行器逐件复算申报与已核内容的一致性，出现新实质差异即停止。单独人工合并仍在合并前核差，工具执行不代替 Owner 终裁。
 
-本节既有 MR 描述名称在 GitHub 对应 PR 描述，申报二/三的标签及逐字段义务保持。首次托管历史导入只按 §6.6 已批准的精确历史范围执行，不通过本节日常 publish 自选基线跳过检查。
+本节既有 MR 描述名称在 GitHub 对应 PR 描述，申报二/三的标签及逐字段义务保持。首次托管历史导入不经本节日常 publish（§6.6），不得以日常 publish 自选基线跳过检查。
 
 MR 描述恒含两项申报（规则正本 = 本节；原「授权登记本机械申报」随三个登记本转只读而无触发对象，自本修订删除）：
 
@@ -400,7 +370,7 @@ H/C 直接父关系、prepare 的单任务单行追加、后继提交使旧 next
 
 | 场景 | 验证内容 |
 |---|---|
-| S1 正常 MR 自动交接 | 只给「发起 MR」后先准备 H 再发布，无独立 $handoff；字段缺失或业务条件不足时不发生 push/create |
+| S1 正常 PR 自动交接 | 只给「发起 PR」后先准备 H 再发布，无独立 $handoff；字段缺失或业务条件不足时不发生 push/create |
 | S2 中途交接 | pause 保存未完成项且没有网络写调用；v2 after_merge=null；重复无变更无空提交；已有 pause 转 mr 补齐 after_merge 并另生 H，不改旧行 |
 | S3 终态与闭合 | done 缺失停报，已有 done 可收尾而不重开；open/answer/close 集合语义、跨任务闭合与原解析回归不变 |
 | S4 context 与 KB-28 | 同一任务换分支取最新结构化意图，旧类别行和 note 不改；不从任意自然语言或命名形状生成授权 |
