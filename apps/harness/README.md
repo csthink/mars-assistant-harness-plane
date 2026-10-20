@@ -27,7 +27,7 @@ HP_BUNDLE_INPUTS_DIR=<构建输入目录> HP_BUNDLE_OPENSSL=<OpenSSL 3 程序> a
 
 完整套件包含 feature-t18 的 `test_bundle`，它以被测代码构建 Runtime 开发 bundle，因此需要两个显式环境变量：`HP_BUNDLE_INPUTS_DIR` 指向构建输入目录（按 `bundle/inputs.lock.json` 的布局存放固定摘要的解释器资产与 `requirements.lock` 所列 wheel），`HP_BUNDLE_OPENSSL` 指向用于交叉验签的 OpenSSL 3 程序（系统 LibreSSL 不支持该用法）。两者没有缺省值：`test_bundle` 有五个测试类，缺少 `HP_BUNDLE_INPUTS_DIR` 时构建 bundle 的四个（`BuildCase`、`AdmissionCase`、`LaunchCase`、`MinimalPathCase`）在 setUpClass 以 `MissingInput: HP_BUNDLE_INPUTS_DIR is not set: ...` 报 ERROR，判定宿主版本的 `MinimumOsCase` 不需要构建输入；缺少 `HP_BUNDLE_OPENSSL` 时交叉验签用例以 `MissingInput: HP_BUNDLE_OPENSSL is not set: ...` 报 ERROR；`run_bundle_report.py` 缺任一变量即以该变量名退出。安装或启动 bundle 的用例要求本机 macOS 不低于 bundle manifest 的 `minimumOs`（`bundle/manifest.py` 的 `MINIMUM_OS`），与接收方准入的判定相同；低于时这些用例以 `host macOS <版本> is below the bundle minimumOs <版本>` 为原因 skip，其余用例照常运行。符合性报告的 `--output` 请取较短的目录：用例把合成 Agent 登记在该目录下，命令路径超过 feature-t4 登记的 256 字符上限时，相关用例会以 REGISTRATION_INVALID 报 ERROR。
 
-output 必须不存在。每次运行保存测试结果、真实帧、合成 Git 状态与中断证据、环境、源码/依赖散列、逐方法覆盖及 AC 映射。失败原件不覆盖。测试报告的成功不自行产生 Human done、发布或双方接收决定。
+output 必须不存在。每次运行保存测试结果、真实帧、合成 Git 状态与中断证据、环境、源码/依赖散列、逐方法覆盖及 AC 映射。失败原件不覆盖。报告的逐条用例结果写在 output 下的 `unittest.log`；加 `--stream-log` 时同时写到标准输出。报告不通过时，标准错误列出不通过的用例、子用例与协议帧核对项；这两项只改变输出，不改变判定。测试报告的成功不自行产生 Human done、发布或双方接收决定。
 
 独立 Host 可以只使用下面的显式测试入口，不必导入 dispatcher 或我们的 Host driver：
 

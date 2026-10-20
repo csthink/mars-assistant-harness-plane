@@ -51,6 +51,27 @@ class Result(unittest.TextTestResult):
         super().addSubTest(test,subtest,error)
         self.subcases.append(dict(id=subtest.id(),status="PASS" if error is None else "FAIL"))
 
+class Tee:
+    """Writes the unittest log to the report file and, with --stream-log, to stdout as well; output only."""
+    def __init__(self,*streams):self.streams=streams
+    def write(self,text):
+        for stream in self.streams:stream.write(text)
+        return len(text)
+    def flush(self):
+        for stream in self.streams:stream.flush()
+    def isatty(self):return False
+
+def failure_summary(result,source_unchanged,wire,required_methods):
+    """Names what made the report fail; the verdict itself is computed in main and is not changed here."""
+    lines=[case["id"]+" "+case["status"] for case in result.cases if case["status"]!="PASS"]
+    lines+=[case["id"]+" FAIL" for case in result.subcases if case["status"]!="PASS"]
+    lines+=[test.id()+" UNEXPECTED_SUCCESS" for test in result.unexpectedSuccesses]
+    if not source_unchanged:lines.append("files under apps/harness changed during the run")
+    lines+=["wire "+failure["location"]+": "+failure["error"].splitlines()[0] for failure in wire["failures"][:20]]
+    if len(wire["failures"])>20:lines.append("wire: "+str(len(wire["failures"])-20)+" more failures in report.json")
+    lines+=["method "+method+" NOT_COVERED" for method in required_methods if wire["methods"][method]["status"]!="PASS"]
+    return lines
+
 def wire_report(directory):
     schemas=Schemas()
     coverage={method:dict(direction=desc["direction"],requests=0,successes=0,errors=0,evidence=[]) for method,desc in METHODS.items()}
@@ -103,13 +124,16 @@ def durable_facts(directory):
     return facts
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument("--output",required=True,type=Path);parser.add_argument("--pattern",default="test_*.py",choices=["test_*.py","test_host_client.py"]);args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument("--output",required=True,type=Path);parser.add_argument("--pattern",default="test_*.py",choices=["test_*.py","test_host_client.py"])
+    parser.add_argument("--stream-log",action="store_true",help="also write the verbose unittest log to stdout")
+    args=parser.parse_args()
     output=args.output.resolve();output.mkdir(parents=True,exist_ok=False)
     before=fingerprint()
     os.environ["HP_TEST_OUTPUT"]=str(output/"cases")
     suite=unittest.defaultTestLoader.discover(str(APP/"tests"),pattern=args.pattern)
     with (output/"unittest.log").open("w") as log:
-        result=unittest.TextTestRunner(stream=log,verbosity=2,resultclass=Result).run(suite)
+        stream=Tee(log,sys.stdout) if args.stream_log else log
+        result=unittest.TextTestRunner(stream=stream,verbosity=2,resultclass=Result).run(suite)
     wire=wire_report(output/"cases")
     cases={r["id"].split(".")[-1]:r["status"] for r in result.cases}
     required_methods = [m for m,d in METHODS.items() if args.pattern == "test_*.py" or d["direction"] == "runtime-to-host"]
@@ -134,6 +158,10 @@ def main():
         for path in sorted((output/"cases").rglob("*frames*.jsonl")):
             for number,line in enumerate(path.read_text().splitlines(),1):
                 archive.write(json.dumps(dict(source=str(path.relative_to(output/"cases")),line=number,**json.loads(line)),ensure_ascii=False)+"\n")
+    if not report["passed"]:
+        print("Runtime Contract conformance report failed:",file=sys.stderr)
+        for line in failure_summary(result,source_unchanged,wire,required_methods):print("  "+line,file=sys.stderr)
+        print("  unittest log: "+str(output/"unittest.log"),file=sys.stderr)
     print(json.dumps(dict(passed=report["passed"],testsRun=result.testsRun,runtimeFrames=wire["validatedRuntimeFrames"],coveredMethods=sum(m["status"]=="PASS" for m in wire["methods"].values()),report=str(output/"report.json"))))
     return 0 if report["passed"] else 1
 
