@@ -296,7 +296,7 @@ def main():
                 s.run_path("现物 %s" % rel, k, os.path.join(INSTANCE, rel), P)
             else:
                 s.skip("现物 %s" % rel, SKIP_REASON)
-        s.run("最小 proposal", "proposal", PROPOSAL_MIN, "proposal.md", P)
+        s.run("最小 proposal", "proposal", PROPOSAL_MIN, "proposal.md", V)
         s.run("最小 spec", "spec", SPEC_MIN, "spec.md", P)
         s.run("最小 milestones", "milestones", MILESTONES_MIN, "milestones.md", P)
         s.run("最小 task", "task", TASK_MIN, "gov-t3.md", P)
