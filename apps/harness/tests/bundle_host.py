@@ -38,6 +38,7 @@ DIGEST = re.compile(r"^[0-9a-f]{64}$")
 RUNTIME_ID = re.compile(r"^runtime:[A-Za-z0-9._-]{1,120}$")
 PUBLISHER_ID = re.compile(r"^publisher:[A-Za-z0-9._-]{1,120}$")
 IDENTIFIER = re.compile(r"^[A-Za-z0-9._-]{1,120}$")
+CONTRACT_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9:._/-]{0,255}$")
 LIMITS = dict(frameBytes=1048576, depth=32, members=1000, inFlight=32, bufferBytes=4194304, eventWindow=128, pageObjects=100,
               textCharacters=65536)
 
@@ -133,7 +134,38 @@ def manifest_problems(v):
         problems.append("permissionProfileDigest")
     if not IDENTIFIER.fullmatch(str(v["dataFormat"])):
         problems.append("dataFormat")
+    if not isinstance(v["executionProfileRequirements"], list) or len(v["executionProfileRequirements"]) > 32 or not all(
+            requirement_valid(r) for r in v["executionProfileRequirements"]):
+        problems.append("executionProfileRequirements")
     return problems
+
+
+def requirement_valid(r):
+    """The receiver's ProfileRequirement check: capabilityId and an exact {id, version, digest} reference, applicability optional."""
+    if not isinstance(r, dict) or not {"capabilityId", "profile"} <= set(r) <= {"capabilityId", "profile", "applicability"}:
+        return False
+    profile = r["profile"]
+    return (CONTRACT_IDENTIFIER.fullmatch(str(r["capabilityId"])) is not None and exact(profile, ["id", "version", "digest"])
+            and CONTRACT_IDENTIFIER.fullmatch(str(profile["id"])) is not None
+            and CONTRACT_IDENTIFIER.fullmatch(str(profile["version"])) is not None and DIGEST.fullmatch(str(profile["digest"])) is not None)
+
+
+def offered_profiles(manifest):
+    """A SYNTHETIC Host profile catalog: one full ExecutionProfile for each profile the manifest requires, as a Host
+    that verified those policies would offer them. The program identity is explicitly synthetic."""
+    catalog = []
+    for requirement in manifest["executionProfileRequirements"]:
+        ref = requirement["profile"]
+        if any(p["id"] == ref["id"] and p["version"] == ref["version"] and p["digest"] == ref["digest"] for p in catalog):
+            continue
+        review = ref["id"].startswith("review/")
+        catalog.append(dict(ref, trustModel="current-user", purpose="review" if review else "coding-implementer",
+                            programIdentity=dict(launcher="/synthetic/agent", binaryDigest="0" * 64, version="synthetic"),
+                            nativeApprovalPolicy="expected-range-gate" if review else "auto-deny",
+                            configurationDigest=ref["digest"], capabilities=["read-only"] if review else ["tool:Read"],
+                            limitations=[], operations=["review"] if review else ["implement"], maxContextBytes=1048576,
+                            maxToolCalls=20, maxRunSeconds=600))
+    return catalog
 
 
 def launch_problems(v):
@@ -448,7 +480,7 @@ class Installation:
                       launchAuthorization=dict(authorizationRef="launch:" + incarnation[12:], bundleDigest=self.verdict.artifact_digest,
                                                permissionProfileDigest=self.verdict.manifest["permissionProfileDigest"],
                                                expiresAt="2099-01-01T00:00:00Z"),
-                      executionProfiles=[], limits=dict(LIMITS))
+                      executionProfiles=offered_profiles(self.verdict.manifest), limits=dict(LIMITS))
         params.update(overrides)
         return params
 

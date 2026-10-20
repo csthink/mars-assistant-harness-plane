@@ -25,6 +25,10 @@ import instance_area
 ROOT=MECHANISM.parent.parent
 J06='records/diagnostics/feature-t17/2026-09-21/inputs/assistant/docs/design/host-execution-facts-j06.md'
 INVENTORY='records/governance/task-artifact-schema/HarnessPlane_Task_Tree_Alignment_Inventory_v1.json'
+LIVE_REGISTRY=ROOT/'mechanisms/review-channel/review_channel_registry.json'
+# J-04 Reviewer policy = Appendix A r2 bytes plus the restricted setting skills.include_instructions=false (design §7.5).
+J04_REVIEWER_DIGEST='c30bd24676b535c1e1422a58c686a2edb7a4a7719fcd9b912119f161744792ce'
+VOID_REVIEWER_DIGEST='8061614dbefcbb03bab19bb15b2c23a1427d4555ffadd06ea859bed8b83a5d63'
 
 def j06_profiles(program):
     # Fixed Appendix A, r2. ProgramIdentity is explicitly synthetic/current input.
@@ -80,6 +84,27 @@ class IdentityCases(unittest.IsolatedAsyncioTestCase):
         self.registration['profile']=implementer;self.registration['approval_policy']='auto-deny';self.intent['profile']=copy.deepcopy(implementer);self.port=self.make_port()
         with self.assertRaises(ExecutionError) as exc:await self.port.preflight(self.intent)
         self.assertEqual(exc.exception.code,'execution-port-purpose-mismatch')
+        self.assertNotIn('host.execution.start',self.host.methods)
+    async def test_live_registry_reviewer_keeps_skill_instructions_out(self):
+        """The live Registry registers the J-04 Reviewer whose policy keeps Codex skill instructions out; the void policy digest is refused before any start."""
+        text=LIVE_REGISTRY.read_text();live=json.loads(text)
+        ports=[p for p in live['execution_ports'] if p['mode']=='embedded' and p['profile']['purpose']=='review']
+        self.assertEqual(len(ports),1);entry=ports[0]
+        reviewer,_=j06_profiles(entry['profile']['programIdentity'])
+        expected=dict(reviewer,digest=J04_REVIEWER_DIGEST,configurationDigest=J04_REVIEWER_DIGEST)
+        self.assertEqual(entry['profile'],expected)
+        self.assertEqual(entry['applicability']['profileDigest'],J04_REVIEWER_DIGEST)
+        self.assertNotIn(VOID_REVIEWER_DIGEST,text)
+        profile=dict(expected,programIdentity=copy.deepcopy(self.intent['profile']['programIdentity']))
+        self.registration.update(id='embedded',profile=profile);self.registration['applicability']['profileDigest']=J04_REVIEWER_DIGEST
+        self.intent.update(portId='embedded',profile=copy.deepcopy(profile))
+        self.intent['executionBinding'].update(agent='agent:codex',profileDigest=J04_REVIEWER_DIGEST)
+        self.port=self.make_port()
+        await self.port.preflight(self.intent)
+        void=copy.deepcopy(self.intent);void['profile'].update(digest=VOID_REVIEWER_DIGEST,configurationDigest=VOID_REVIEWER_DIGEST)
+        void['executionBinding']['profileDigest']=VOID_REVIEWER_DIGEST
+        with self.assertRaises(ExecutionError) as error:await self.port.preflight(void)
+        self.assertEqual(error.exception.code,'execution-port-profile-mismatch')
         self.assertNotIn('host.execution.start',self.host.methods)
     async def test_missing_scanner_and_barrier_prevent_start(self):
         port=HostExecutionPort(self.host,self.domain,self.registration,self.mapping,self.port.discover,self.port.authorize)
